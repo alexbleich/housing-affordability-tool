@@ -16,7 +16,7 @@ This tool helps visualize and compare the cost of building housing units (e.g., 
 The app displays a chart that overlays estimated development costs with income-based affordability thresholds for the selected regions.
 
 ## 🔗 Try it Online
-The tool is accessible here: [Streamlit App](https://housing-affordability-tool.streamlit.app/)
+The tool is accessible here: https://housing-affordability-tool.streamlit.app/
 
 ## 📁 Files
 - `chittenden_ami.csv`, `addison_ami.csv`, `vermont_ami.csv`: [VHFA income & affordability data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf) by region
