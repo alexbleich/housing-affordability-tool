@@ -27,7 +27,7 @@ cost_df = pd.read_csv("construction_costs.csv")
 # -------------------- INTERFACE --------------------
 st.title("🏘️ Housing Affordability Visualizer")
 st.markdown("Compare unit development costs with AMI-based affordability thresholds across Vermont regions.")
-st.markdown("[View source on GitHub](https://github.com/alexbleich/housing-affordability-tool)")
+st.markdown("[View program & method on GitHub](https://github.com/alexbleich/housing-affordability-tool)")
 
 
 valid_unit_types = ['Apartment', 'Townhome', 'Condo']
@@ -115,4 +115,4 @@ if unit_labels and development_costs and any(development_costs):
     fig.tight_layout()
     st.pyplot(fig)
 
-st.markdown("[Data source](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
+st.markdown("[VHFA Housing Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
