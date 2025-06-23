@@ -35,7 +35,11 @@ for i in range(num_units):
     unit_type = st.selectbox(f"Unit type", valid_unit_types, key=f"type_{i}")
     square_feet = st.number_input("Square footage", min_value=1, max_value=5000, key=f"sf_{i}")
     est_bedrooms = max(1, min(round((square_feet * 0.28) / 200), 5))
-    st.caption(f"**Estimated bedrooms: {est_bedrooms}**")
+    st.markdown(
+        f"<span style='color: white; font-weight: bold;'>Estimated bedrooms: {est_bedrooms}</span>",
+        unsafe_allow_html=True
+    )
+
 
     cost_row = cost_df[cost_df['unit_type'].str.lower() == unit_type.lower()]
     if not cost_row.empty:
