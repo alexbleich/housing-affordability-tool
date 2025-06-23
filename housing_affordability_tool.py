@@ -81,11 +81,25 @@ for region in selected_regions:
 # -------------------- PLOTTING --------------------
 if unit_labels and development_costs and any(development_costs):
     fig, ax1 = plt.subplots(figsize=(12, 6))
+    
     bars = ax1.bar(unit_labels, development_costs, color='skyblue', edgecolor='black')
+
+    # Set y-axis limit with padding
+    ymax = max(development_costs) * 1.1  # 10% headroom
+    ax1.set_ylim(0, ymax)
+
     for bar in bars:
         yval = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width() / 2, yval + 5000, f"${yval:,.0f}", ha='center', va='bottom', fontsize=9)
+        ax1.text(
+            bar.get_x() + bar.get_width() / 2,
+            yval + (ymax * 0.02),
+            f"${yval:,.0f}",
+            ha='center',
+            va='bottom',
+            fontsize=9
+        )
 
+    # Affordability lines
     colors = ['green', 'red', 'orange', 'purple', 'blue', 'brown']
     for i, (label, value) in enumerate(affordability_lines.items()):
         ax1.axhline(y=value, linestyle='--', color=colors[i % len(colors)], label=label)
@@ -97,11 +111,12 @@ if unit_labels and development_costs and any(development_costs):
     if affordability_lines:
         ax1.legend()
 
+    # Secondary Y-axis for AMI
     ax2 = ax1.twinx()
     ax2.set_ylim(ax1.get_ylim())
     ax2.set_yticks(list(affordability_lines.values()))
     ax2.set_yticklabels([f"{k.split()[0]}\n${affordability_lines[k]:,.0f}" for k in affordability_lines])
     ax2.set_ylabel("% AMI")
 
-    fig.tight_layout()  # FIXED
+    fig.tight_layout()
     st.pyplot(fig)
