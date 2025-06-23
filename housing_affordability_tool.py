@@ -98,7 +98,7 @@ if unit_labels and development_costs and any(development_costs):
         ax1.axhline(y=value, linestyle='--', color=f"C{i}", label=label)
 
     ax1.yaxis.set_major_formatter(FuncFormatter(lambda x, _: '${:,.0f}'.format(x)))
-    ax1.set_ylabel("Cost ($)")
+    ax1.set_ylabel("Development Cost ($)")
     plt.xticks(rotation=20)
     plt.title("Development Cost vs. Affordable Purchase Price Thresholds")
     if affordability_lines:
@@ -108,7 +108,7 @@ if unit_labels and development_costs and any(development_costs):
     ax2.set_ylim(ax1.get_ylim())
     ax2.set_yticks(list(affordability_lines.values()))
     ax2.set_yticklabels([f"{k.split()[0]}\n${affordability_lines[k]:,.0f}" for k in affordability_lines])
-    ax2.set_ylabel("% AMI")
+    ax2.set_ylabel("Affordability by % AMI")
 
     fig.tight_layout()
     st.pyplot(fig)
