@@ -23,6 +23,6 @@ Once deployed, the tool will be accessible here:
 👉 [Streamlit App](https://housing-affordability-tool.streamlit.app/)
 
 ## 📁 Files
-- `chittenden_ami.csv`, `addison_ami.csv`, `vermont_ami.csv`: Income & affordability data by region
+- `chittenden_ami.csv`, `addison_ami.csv`, `vermont_ami.csv`: VHFA income & affordability data by region
 - `construction_costs.csv`: Estimated development cost per square foot by unit type
 - `housing_affordability_tool.py`: Python script that powers the interactive tool
