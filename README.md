@@ -1,22 +1,19 @@
 # Housing Affordability Tool
 
-This tool helps visualize and compare the cost of building housing units 
-(e.g., apartments, townhomes, condos) with the price households can afford 
-based on their income and location.
+This tool helps visualize and compare the cost of building housing units (e.g., apartments, townhomes, condos) with the price that households can afford based on their income and location.
 
-Users input:
-- Unit type and square footage
-- Household size
-- Target income levels (% of Area Median Income (AMI))
+### 🛠️ User Inputs
+- Unit type and square footage (# of bedrooms estimated from sf)
+- Target income levels (% of Area Median Income, or AMI)
 - Vermont region (Chittenden, Addison, and/or statewide)
 
-The tool then estimates:
-- Development cost based on square footage and unit type
-- Affordable purchase price thresholds using AMI data
-- A visual comparison to assess affordability
+### 📈 What It Does
+- Estimates development cost based on unit type and square footage
+- Retrieves affordable purchase price thresholds using AMI data
+- Generates a visual comparison to illustrate financial feasibility
 
-## 📊 Output
-The app generates a chart that overlays development costs with AMI-based affordability thresholds for selected regions.
+### 📊 Output
+The app displays a chart that overlays estimated development costs with income-based affordability thresholds for the selected regions.
 
 ## 🔗 Try it Online
 Once deployed, the tool will be accessible here:  
