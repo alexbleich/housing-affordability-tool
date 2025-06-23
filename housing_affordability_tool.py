@@ -35,7 +35,7 @@ for i in range(num_units):
     unit_type = st.selectbox(f"Unit type", valid_unit_types, key=f"type_{i}")
     square_feet = st.number_input("Square footage", min_value=1, max_value=5000, key=f"sf_{i}")
     est_bedrooms = max(1, min(round((square_feet * 0.28) / 200), 5))
-    st.caption(f"Estimated bedrooms: {est_bedrooms}")
+    st.caption(f"**Estimated bedrooms: {est_bedrooms}**")
 
     cost_row = cost_df[cost_df['unit_type'].str.lower() == unit_type.lower()]
     if not cost_row.empty:
@@ -46,7 +46,6 @@ for i in range(num_units):
 if unit_labels:
     avg_sf = sum([float(label.split('sf')[0]) for label in unit_labels]) / len(unit_labels)
     bedrooms = max(1, min(round((avg_sf * 0.28) / 200), 5))
-    st.markdown(f"**Estimated average bedrooms per unit:** {bedrooms}")
 else:
     bedrooms = 1
 
