@@ -43,6 +43,13 @@ for i in range(num_units):
         unit_labels.append(f"{int(square_feet)}sf {unit_type}")
         development_costs.append(cost_per_sf * square_feet)
 
+if unit_labels:
+    avg_sf = sum([float(label.split('sf')[0]) for label in unit_labels]) / len(unit_labels)
+    bedrooms = max(1, min(round((avg_sf * 0.28) / 200), 5))
+    st.markdown(f"**Estimated average bedrooms per unit:** {bedrooms}")
+else:
+    bedrooms = 1
+
 # -------------------- AMI SELECTION --------------------
 st.subheader("Income Thresholds")
 selected_regions = st.multiselect("Select region(s) to compare", list(data_files.keys()), default=["Chittenden"])
