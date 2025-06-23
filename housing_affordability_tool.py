@@ -110,7 +110,7 @@ if unit_labels and development_costs and any(development_costs):
     ax2.set_ylim(ax1.get_ylim())
     ax2.set_yticks(list(affordability_lines.values()))
     ax2.set_yticklabels([f"{k.split()[0]}\n${affordability_lines[k]:,.0f}" for k in affordability_lines])
-    ax2.set_ylabel("Affordability by % AMI")
+    ax2.set_ylabel("Max. Affordable Purchase Price by % AMI")
 
     fig.tight_layout()
     st.pyplot(fig)
