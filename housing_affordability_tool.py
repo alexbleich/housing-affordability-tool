@@ -116,4 +116,3 @@ if unit_labels and development_costs and any(development_costs):
     st.pyplot(fig)
 
 st.markdown("[VHFA Housing Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
-
