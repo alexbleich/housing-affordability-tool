@@ -55,7 +55,7 @@ else:
 
 # -------------------- AMI SELECTION --------------------
 st.subheader("Income Thresholds")
-selected_regions = st.multiselect("Select region(s) to compare", list(data_files.keys()), default=["Chittenden"])
+selected_regions = st.multiselect("Select region(s) to compare", list(data_files.keys()), default=[])
 valid_ami_values = [30] + list(range(50, 155, 5))
 num_amis = st.slider("How many AMI levels?", 1, 5, 1)
 
