@@ -57,7 +57,7 @@ else:
 st.subheader("Income Thresholds")
 selected_regions = st.multiselect("Select region(s) to compare", list(data_files.keys()), default=[])
 valid_ami_values = [30] + list(range(50, 155, 5))
-num_amis = st.slider("How many AMI levels?", 1, 5, 1)
+num_amis = st.slider("How many AMI levels?", 1, 3, 1)
 
 amis = []
 for i in range(num_amis):
