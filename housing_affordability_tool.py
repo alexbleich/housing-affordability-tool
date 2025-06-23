@@ -16,8 +16,7 @@ st.title("Housing Affordability Tool")
 
 # Unit Comparisons
 num_units = st.slider("How many units would you like to compare?", 1, 5, 1)
-unit_data = []
-valid_unit_types = ['Apartment', 'Townhome', 'Condo']
+unit_labels, development_costs, valid_unit_types = [], [], ['Apartment', 'Townhome', 'Condo']
 
 for i in range(num_units):
     st.subheader(f"Unit {i + 1}")
@@ -29,18 +28,14 @@ for i in range(num_units):
     cost_row = cost_df[cost_df['unit_type'] == unit_type]
     if not cost_row.empty:
         cost_per_sf = cost_row['cost_per_sf'].values[0]
-        dev_cost = cost_per_sf * square_feet
-        label = f"{int(square_feet)}sf {unit_type}"
-        unit_data.append((label, dev_cost))
+        unit_labels.append(f"{int(square_feet)}sf {unit_type}")
+        development_costs.append(cost_per_sf * square_feet)
 
 # Estimate bedrooms
-if unit_data:
-    avg_sf = sum([int(label.split('sf')[0]) for label, _ in unit_data]) / len(unit_data)
-    bedrooms = max(1, min(round((avg_sf * 0.28) / 200), 5))
-    st.text(f"\nAssuming an average of {bedrooms} bedrooms per unit based on total square footage.\n")
-else:
-    bedrooms = 1
-    st.warning("No valid unit square footage provided. Please enter valid unit data.")
+# These assumptions can be changed as needed. Currently, they assume 200sf on average and that they take up 28% of total sf
+avg_sf = sum([float(label.split('sf')[0]) for label in unit_labels]) / len(unit_labels)
+bedrooms = max(1, min(round((avg_sf * 0.28) / 200), 5))
+st.text(f"\nAssuming an average of {bedrooms} bedrooms per unit based on total square footage.\n")
 
 # AMI levels and regions
 valid_regions = list(data_files.keys())
@@ -71,32 +66,28 @@ for region in selected_regions:
         affordability_lines[f"{ami}% AMI - {region}"] = float(row[col_name].values[0])
 
 # Plot
-if unit_data:
-    labels, development_costs = zip(*unit_data)
-    fig, ax1 = plt.subplots(figsize=(12, 6))
+fig, ax1 = plt.subplots(figsize=(12, 6))
+bars = ax1.bar(unit_labels, development_costs, color='skyblue', edgecolor='black')
+for bar in bars:
+    yval = bar.get_height()
+    ax1.text(bar.get_x() + bar.get_width() / 2, yval + 5000, f"${yval:,.0f}", ha='center', va='bottom', fontsize=9)
 
-    bars = ax1.bar(labels, development_costs, color='skyblue', edgecolor='black')
-    for bar in bars:
-        yval = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width() / 2, yval + 5000, f"${yval:,.0f}", ha='center', va='bottom', fontsize=9)
+colors = ['red', 'green', 'orange', 'purple', 'brown', 'blue', 'gray', 'darkgreen', 'darkred']
+for i, (label, value) in enumerate(affordability_lines.items()):
+    ax1.axhline(y=value, linestyle='--', color=colors[i % len(colors)], label=label)
 
-    colors = ['red', 'green', 'orange', 'purple', 'brown', 'blue', 'gray', 'darkgreen', 'darkred']
-    for i, (label, value) in enumerate(affordability_lines.items()):
-        ax1.axhline(y=value, linestyle='--', color=colors[i % len(colors)], label=label)
+ax1.yaxis.set_major_formatter(FuncFormatter(lambda x, _: '${:,.0f}'.format(x)))
+ax1.set_ylabel("Cost ($)", fontsize=12)
+plt.xticks(rotation=20)
+plt.title("Development Cost vs. Affordable Purchase Price Thresholds")
+if affordability_lines:
+    ax1.legend()
 
-    ax1.yaxis.set_major_formatter(FuncFormatter(lambda x, _: '${:,.0f}'.format(x)))
-    ax1.set_ylabel("Cost ($)", fontsize=12)
-    plt.xticks(rotation=20)
-    plt.title("Development Cost vs. Affordable Purchase Price Thresholds")
-    if affordability_lines:
-        ax1.legend()
+# Secondary Y-axis for % AMI
+ax2 = ax1.twinx()
+ax2.set_ylim(ax1.get_ylim())
+ax2.set_yticks(list(affordability_lines.values()))
+ax2.set_yticklabels([k.split()[0] for k in affordability_lines.keys()])
+ax2.set_ylabel("% AMI")
 
-    ax2 = ax1.twinx()
-    ax2.set_ylim(ax1.get_ylim())
-    ax2.set_yticks(list(affordability_lines.values()))
-    ax2.set_yticklabels([k.split()[0] for k in affordability_lines.keys()])
-    ax2.set_ylabel("% AMI")
-
-    st.pyplot(fig)
-else:
-    st.warning("Please enter unit data to generate the comparison chart.")
+st.pyplot(fig)
