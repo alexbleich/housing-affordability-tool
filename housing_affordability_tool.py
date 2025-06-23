@@ -16,26 +16,26 @@ st.title("Housing Affordability Tool")
 
 # Unit Comparisons
 num_units = st.slider("How many units would you like to compare?", 1, 5, 1)
-unit_labels, development_costs, unit_square_feet = [], [], []
+unit_data = []
 valid_unit_types = ['Apartment', 'Townhome', 'Condo']
 
 for i in range(num_units):
     st.subheader(f"Unit {i + 1}")
     unit_type = st.selectbox(f"Unit type for Unit {i + 1}", valid_unit_types, key=f"type_{i}")
     square_feet = st.number_input(f"Square footage for Unit {i + 1}", min_value=1, max_value=5000, key=f"sf_{i}")
-    unit_square_feet.append(square_feet)
     est_bedrooms = max(1, min(round((square_feet * 0.28) / 200), 5))
     st.text(f"This unit likely has approximately {est_bedrooms} bedrooms based on square footage.")
 
     cost_row = cost_df[cost_df['unit_type'] == unit_type]
     if not cost_row.empty:
         cost_per_sf = cost_row['cost_per_sf'].values[0]
-        unit_labels.append(f"{int(square_feet)}sf {unit_type}")
-        development_costs.append(cost_per_sf * square_feet)
+        dev_cost = cost_per_sf * square_feet
+        label = f"{int(square_feet)}sf {unit_type}"
+        unit_data.append((label, dev_cost))
 
 # Estimate bedrooms
-if unit_square_feet:
-    avg_sf = sum(unit_square_feet) / len(unit_square_feet)
+if unit_data:
+    avg_sf = sum([int(label.split('sf')[0]) for label, _ in unit_data]) / len(unit_data)
     bedrooms = max(1, min(round((avg_sf * 0.28) / 200), 5))
     st.text(f"\nAssuming an average of {bedrooms} bedrooms per unit based on total square footage.\n")
 else:
@@ -71,10 +71,11 @@ for region in selected_regions:
         affordability_lines[f"{ami}% AMI - {region}"] = float(row[col_name].values[0])
 
 # Plot
-if unit_labels and development_costs:
+if unit_data:
+    labels, development_costs = zip(*unit_data)
     fig, ax1 = plt.subplots(figsize=(12, 6))
 
-    bars = ax1.bar(unit_labels, development_costs, color='skyblue', edgecolor='black')
+    bars = ax1.bar(labels, development_costs, color='skyblue', edgecolor='black')
     for bar in bars:
         yval = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width() / 2, yval + 5000, f"${yval:,.0f}", ha='center', va='bottom', fontsize=9)
