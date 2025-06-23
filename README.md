@@ -1,4 +1,4 @@
-# housing-affordability-tool
+# Housing Affordability Tool
 
 This tool helps visualize and compare the cost of building housing units 
 (e.g., apartments, townhomes, condos) with the price households can afford 
