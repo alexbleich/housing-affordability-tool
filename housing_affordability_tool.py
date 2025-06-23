@@ -1,5 +1,5 @@
 """
-Streamlit Housing Affordability Visualizer
+Housing Affordability Visualizer
 
 This program compares estimated housing development costs to income-based affordability
 thresholds across Vermont. Users select unit types, sizes, regions, and AMI levels to
@@ -116,3 +116,4 @@ if unit_labels and development_costs and any(development_costs):
     st.pyplot(fig)
 
 st.markdown("[VHFA Housing Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
+
