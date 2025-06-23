@@ -73,10 +73,12 @@ for region in selected_regions:
 
 # Plot
 fig, ax1 = plt.subplots(figsize=(12, 6))
-bars = ax1.bar(unit_labels, development_costs, color='skyblue', edgecolor='black')
-for bar in bars:
-    yval = bar.get_height()
-    ax1.text(bar.get_x() + bar.get_width() / 2, yval + 5000, f"${yval:,.0f}", ha='center', va='bottom', fontsize=9)
+
+if unit_labels and development_costs:
+    bars = ax1.bar(unit_labels, development_costs, color='skyblue', edgecolor='black')
+    for bar in bars:
+        yval = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width() / 2, yval + 5000, f"${yval:,.0f}", ha='center', va='bottom', fontsize=9)
 
 colors = ['red', 'green', 'orange', 'purple', 'brown', 'blue', 'gray', 'darkgreen', 'darkred']
 for i, (label, value) in enumerate(affordability_lines.items()):
