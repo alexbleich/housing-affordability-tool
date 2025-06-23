@@ -14,13 +14,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
-# CONFIGURATION --> These must be changed to be the correct file path to the csv files
+# CONFIGURATION
 data_files = {
-    "Chittenden": pd.read_csv("/Users/alexbleich/Documents/summit/chittenden_ami.csv"),
-    "Addison": pd.read_csv("/Users/alexbleich/Documents/summit/addison_ami.csv"),
-    "Vermont": pd.read_csv("/Users/alexbleich/Documents/summit/vermont_ami.csv")
+    "Chittenden": pd.read_csv("chittenden_ami.csv"),
+    "Addison": pd.read_csv("addison_ami.csv"),
+    "Vermont": pd.read_csv("vermont_ami.csv")
 }
-cost_df = pd.read_csv("/Users/alexbleich/Documents/summit/construction_costs.csv")
+cost_df = pd.read_csv("construction_costs.csv")
 
 
 # Helper functions
