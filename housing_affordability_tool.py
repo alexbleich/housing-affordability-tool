@@ -40,7 +40,6 @@ for i in range(num_units):
         unsafe_allow_html=True
     )
 
-
     cost_row = cost_df[cost_df['unit_type'].str.lower() == unit_type.lower()]
     if not cost_row.empty:
         cost_per_sf = cost_row['cost_per_sf'].values[0]
@@ -80,7 +79,7 @@ for region in selected_regions:
             st.warning(f"{ami}% AMI or '{col_name}' not found in {region} dataset.")
 
 # -------------------- PLOTTING --------------------
-if unit_labels and development_costs:
+if unit_labels and development_costs and any(development_costs):
     fig, ax1 = plt.subplots(figsize=(12, 6))
     bars = ax1.bar(unit_labels, development_costs, color='skyblue', edgecolor='black')
     for bar in bars:
@@ -104,7 +103,5 @@ if unit_labels and development_costs:
     ax2.set_yticklabels([f"{k.split()[0]}\n${affordability_lines[k]:,.0f}" for k in affordability_lines])
     ax2.set_ylabel("% AMI")
 
-    plt.tight_layout()
+    fig.tight_layout()  # FIXED
     st.pyplot(fig)
-else:
-    st.warning("Please input at least one unit to visualize.")
