@@ -16,12 +16,14 @@ st.title("Housing Affordability Tool")
 
 # Unit Comparisons
 num_units = st.slider("How many units would you like to compare?", 1, 5, 1)
-unit_labels, development_costs, valid_unit_types = [], [], ['Apartment', 'Townhome', 'Condo']
+unit_labels, development_costs, unit_square_feet = [], [], []
+valid_unit_types = ['Apartment', 'Townhome', 'Condo']
 
 for i in range(num_units):
     st.subheader(f"Unit {i + 1}")
     unit_type = st.selectbox(f"Unit type for Unit {i + 1}", valid_unit_types, key=f"type_{i}")
     square_feet = st.number_input(f"Square footage for Unit {i + 1}", min_value=1, max_value=5000, key=f"sf_{i}")
+    unit_square_feet.append(square_feet)
     est_bedrooms = max(1, min(round((square_feet * 0.28) / 200), 5))
     st.text(f"This unit likely has approximately {est_bedrooms} bedrooms based on square footage.")
 
@@ -33,9 +35,13 @@ for i in range(num_units):
 
 # Estimate bedrooms
 # These assumptions can be changed as needed. Currently, they assume 200sf on average and that they take up 28% of total sf
-avg_sf = sum([float(label.split('sf')[0]) for label in unit_labels]) / len(unit_labels)
-bedrooms = max(1, min(round((avg_sf * 0.28) / 200), 5))
-st.text(f"\nAssuming an average of {bedrooms} bedrooms per unit based on total square footage.\n")
+if unit_square_feet:
+    avg_sf = sum(unit_square_feet) / len(unit_square_feet)
+    bedrooms = max(1, min(round((avg_sf * 0.28) / 200), 5))
+    st.text(f"\nAssuming an average of {bedrooms} bedrooms per unit based on total square footage.\n")
+else:
+    bedrooms = 1  # Default fallback
+    st.warning("No valid unit square footage provided. Please enter valid unit data.")
 
 # AMI levels and regions
 valid_regions = list(data_files.keys())
