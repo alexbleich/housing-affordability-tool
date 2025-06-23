@@ -1,9 +1,11 @@
 """
 Streamlit Housing Affordability Visualizer
 
-This program visualizes housing development costs alongside affordable purchase price thresholds
-based on Area Median Income (AMI) levels. Users can compare the cost of developing different unit
-types across square footages and regions in Vermont.
+This program compares estimated housing development costs to income-based affordability
+thresholds across Vermont. Users select unit types, sizes, regions, and AMI levels to
+generate a visual comparison of what it costs to build versus what households can afford.
+The goal is to show how high development costs make typical homes unaffordable for most
+people, limiting demand and discouraging new market-rate housing construction.
 
 Author: Alex Bleich
 Date: June 23rd, 2025
