@@ -1,118 +1,241 @@
-"""
-Housing Affordability Visualizer
-
-This program compares estimated housing development costs to income-based affordability
-thresholds across Vermont. Users select unit types, sizes, regions, and AMI levels to
-generate a visual comparison of what it costs to build versus what households can afford.
-The goal is to show how high development costs make typical homes unaffordable for most
-people, limiting demand and discouraging new market-rate housing construction.
-
-Author: Alex Bleich
-Date: June 23rd, 2025
-"""
+# housing_affordability_tool.py
+# Streamlit app: Housing Affordability Visualizer
+# Uses CSVs in ./data: assumptions.csv, {addison|chittenden|vermont}_ami.csv
 
 import pandas as pd
+import numpy as np
+import streamlit as st
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
-import streamlit as st
+from pathlib import Path
 
-# -------------------- CONFIGURATION --------------------
-data_files = {
-    "Chittenden": pd.read_csv("chittenden_ami.csv"),
-    "Addison": pd.read_csv("addison_ami.csv"),
-    "Vermont": pd.read_csv("vermont_ami.csv")
+# -------------------- FILE PATHS (repo-relative) --------------------
+ROOT = Path(__file__).parent
+DATA_DIR = ROOT / "data"
+ASSUMPTIONS_CSV = DATA_DIR / "assumptions.csv"
+REGION_FILES = {
+    "Chittenden": DATA_DIR / "chittenden_ami.csv",
+    "Addison":    DATA_DIR / "addison_ami.csv",
+    "Vermont":    DATA_DIR / "vermont_ami.csv",
 }
-cost_df = pd.read_csv("construction_costs.csv")
 
-# -------------------- INTERFACE --------------------
+# -------------------- LOAD DATA --------------------
+@st.cache_data
+def load_assumptions(p: Path) -> pd.DataFrame:
+    df = pd.read_csv(p)
+    # normalize text cols
+    for c in ["category", "parent_option", "option", "value_type", "unit"]:
+        if c in df.columns:
+            df[c] = df[c].astype(str).str.strip().str.lower()
+    df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0.0)
+    return df
+
+@st.cache_data
+def load_regions(files: dict) -> dict:
+    out = {}
+    for name, p in files.items():
+        df = pd.read_csv(p)
+        df.columns = df.columns.str.strip().str.lower()
+        if "ami" in df.columns:
+            df["ami"] = pd.to_numeric(df["ami"], errors="coerce")
+        out[name] = df
+    return out
+
+assump = load_assumptions(ASSUMPTIONS_CSV)
+regions = load_regions(REGION_FILES)
+
+# -------------------- HELPERS --------------------
+def rows(category, option=None, parent=None):
+    q = assump["category"].eq(category)
+    if parent is not None:
+        q &= assump["parent_option"].eq(str(parent).lower())
+    if option is not None:
+        q &= assump["option"].eq(str(option).lower())
+    return assump[q]
+
+def list_options(category, parent=None):
+    r = rows(category, parent=parent)
+    return r["option"].tolist()
+
+def baseline_per_sf() -> float:
+    r = rows("baseline_cost", option="baseline")
+    return float(r.iloc[0]["value"]) if not r.empty else 0.0
+
+def mf_factor(housing_type: str) -> float:
+    r = rows("mf_efficiency_factor", option="default", parent=housing_type)
+    return float(r.iloc[0]["value"]) if not r.empty else 1.0
+
+def bedroom_sf(housing_type: str, bedroom_label: str) -> float:
+    r = rows("bedrooms", option=bedroom_label, parent=housing_type)
+    return float(r.iloc[0]["value"]) if not r.empty else np.nan
+
+def percent_val(category: str, option: str) -> float:
+    r = rows(category, option=option)
+    return float(r.iloc[0]["value"]) if not r.empty else 0.0
+
+def per_sf_val(category: str, option: str) -> float:
+    r = rows(category, option=option)
+    if r.empty or r.iloc[0]["value_type"] != "per_sf":
+        return 0.0
+    return float(r.iloc[0]["value"])
+
+def total_val(category: str, option: str) -> float:
+    r = rows(category, option=option)
+    if r.empty or r.iloc[0]["value_type"] != "total":
+        return 0.0
+    return float(r.iloc[0]["value"])
+
+def pick_afford_col(bedrooms_int: int, unit_type: str) -> str:
+    """
+    Townhome/Condo -> purchase thresholds 'buy{1..5}'
+    Apartment -> rent thresholds 'rent{0..5}' (placeholder until you wire rent logic)
+    """
+    b = int(np.clip(bedrooms_int, 0, 5))
+    if unit_type in ("townhome", "condo"):
+        return f"buy{max(1, b)}"
+    return f"rent{b}"  # TODO: map apartments to rent thresholds
+
+def affordability_lines(selected_regions, amis, column_name):
+    lines = {}
+    for region in selected_regions:
+        df = regions[region]
+        for ami in amis:
+            r = df[df["ami"].eq(ami / 100.0)]
+            if not r.empty and column_name in r.columns:
+                lines[f"{ami}% AMI - {region}"] = float(r.iloc[0][column_name])
+    return lines
+
+def compute_tdc(sf: float, utype: str, energy_code: str, energy_source: str,
+                infrastructure: str, finish_quality: str) -> float:
+    base = baseline_per_sf()                 # e.g., 400 $/sf
+    base_eff = base * mf_factor(utype)       # apply MF factor to baseline $/sf
+
+    pct_total = (percent_val("energy_code", energy_code)
+                 + percent_val("finish_quality", finish_quality))
+    add_per_sf_from_pct = base * (pct_total / 100.0)
+
+    add_per_sf_energy = per_sf_val("energy_source", energy_source)
+    infra_total = total_val("infrastructure", infrastructure)
+    infra_per_sf = per_sf_val("infrastructure", infrastructure)
+
+    per_sf_sum = base_eff + add_per_sf_from_pct + add_per_sf_energy + infra_per_sf
+    return sf * per_sf_sum + infra_total
+
+# -------------------- UI --------------------
 st.title("🏘️ Housing Affordability Visualizer")
-st.markdown("Compare unit development costs with AMI-based affordability thresholds across Vermont regions.")
-st.markdown("[View program & method on GitHub](https://github.com/alexbleich/housing-affordability-tool)")
+st.write("Compare unit development costs with AMI-based affordability thresholds across Vermont regions.")
 
+num_units = st.slider("How many units would you like to compare?", 1, 5, 2)
 
-valid_unit_types = ['Apartment', 'Townhome', 'Condo']
-unit_labels, development_costs, square_feet_list = [], [], []
-
-num_units = st.slider("How many units would you like to compare?", 1, 5, 1)
+units = []
+housing_types = ["townhome", "condo", "apartment"]
 
 for i in range(num_units):
-    st.subheader(f"Unit {i + 1}")
-    unit_type = st.selectbox("Unit type", valid_unit_types, key=f"type_{i}")
-    square_feet = st.number_input("Square footage", min_value=1, max_value=5000, key=f"sf_{i}")
-    square_feet_list.append(square_feet)
+    st.subheader(f"Unit {i+1}")
+    with st.container(border=True):
+        utype = st.selectbox("Unit type",
+                             [x.title() for x in housing_types],
+                             index=0, key=f"type_{i}").lower()
 
-    est_bedrooms = max(1, min(round((square_feet * 0.28) / 200), 5))
-    st.markdown(f"<span style='color: white; font-weight: bold;'>Estimated bedrooms: {est_bedrooms}</span>", unsafe_allow_html=True)
+        br_opts = list_options("bedrooms", parent=utype) or ["2"]
+        br = st.selectbox("Number of bedrooms", br_opts, key=f"br_{i}")
 
-    row = cost_df[cost_df['unit_type'].str.lower() == unit_type.lower()]
-    if not row.empty:
-        cost_per_sf = row['cost_per_sf'].values[0]
-        unit_labels.append(f"{int(square_feet)}sf {unit_type}")
-        development_costs.append(cost_per_sf * square_feet)
+        sf = bedroom_sf(utype, br)
+        if np.isnan(sf):
+            st.warning("No SF mapping found for this selection; defaulting to 1,000 sf.")
+            sf = 1000.0
 
-# Estimate avg bedroom count for affordability lookups
-if square_feet_list:
-    avg_sf = sum(square_feet_list) / len(square_feet_list)
-    bedrooms = max(1, min(round((avg_sf * 0.28) / 200), 5))
-else:
-    bedrooms = 1
+        # Display MF factor being applied
+        st.caption(f"MF Efficiency Factor: {int(round(mf_factor(utype)*100))}% (applied to baseline $/sf)")
 
-# -------------------- AMI SELECTION --------------------
+        code_choice   = st.selectbox("Energy code standard", list_options("energy_code", "default") or ["base_me_nh_code"], key=f"code_{i}")
+        source_choice = st.selectbox("Energy source",        list_options("energy_source", "default") or ["natural_gas"],    key=f"src_{i}")
+        infra_choice  = st.selectbox("Infrastructure required?", list_options("infrastructure", "default") or ["no", "yes"], key=f"infra_{i}")
+        finish_choice = st.selectbox("Finish quality",       list_options("finish_quality", "default") or ["average"],       key=f"finish_{i}")
+
+        units.append({
+            "type": utype,
+            "bed_label": br,
+            "sf": float(sf),
+            "energy_code": code_choice,
+            "energy_source": source_choice,
+            "infrastructure": infra_choice,
+            "finish_quality": finish_choice,
+        })
+
+# -------------------- Income thresholds --------------------
 st.subheader("Income Thresholds")
-selected_regions = st.multiselect("Select region(s)", list(data_files.keys()), default=[])
+region_opts = list(REGION_FILES.keys())
+selected_regions = st.multiselect("Select region(s)", region_opts, default=["Chittenden"])
+
 valid_ami_values = [30] + list(range(50, 155, 5))
-num_amis = st.slider("How many AMI levels?", 1, 3, 1)
+num_amis = st.slider("How many AMI levels?", 1, 3, 2)
+ami_list = []
+for j in range(num_amis):
+    default = 100 if j == 0 else 150
+    ami_list.append(st.selectbox(f"AMI value #{j+1}",
+                                 valid_ami_values,
+                                 index=valid_ami_values.index(default),
+                                 key=f"ami_{j}"))
 
-amis = []
-for i in range(num_amis):
-    ami = st.selectbox(f"AMI value #{i + 1}", valid_ami_values, key=f"ami_{i}")
-    if ami not in amis:
-        amis.append(ami)
+# -------------------- CALCULATE --------------------
+labels, tdcs, br_ints = [], [], []
+for u in units:
+    # convert bedroom label -> int for thresholds (studio -> 0)
+    if str(u["bed_label"]).lower() == "studio":
+        b_int = 0
+    else:
+        try:
+            b_int = int(u["bed_label"])
+        except Exception:
+            b_int = 2
+    br_ints.append(max(1, b_int))  # buy columns are 1..5; studio treated as 1 for buy
 
-# -------------------- AFFORDABILITY THRESHOLDS --------------------
-affordability_lines = {}
-col_name = f"buy{bedrooms}"
+    tdcs.append(compute_tdc(u["sf"], u["type"], u["energy_code"], u["energy_source"],
+                            u["infrastructure"], u["finish_quality"]))
+    labels.append(f"{int(u['sf'])}sf {u['type'].title()}")
 
-for region in selected_regions:
-    df = data_files[region]
-    df.columns = df.columns.str.strip().str.lower()
-    df['ami'] = pd.to_numeric(df['ami'], errors='coerce')
-    for ami in amis:
-        row = df[df['ami'] == ami / 100]
-        if not row.empty and col_name in row:
-            affordability_lines[f"{ami}% AMI - {region}"] = float(row[col_name].values[0])
-        else:
-            st.warning(f"{ami}% AMI or '{col_name}' not found in {region} dataset.")
+line_bedrooms = int(np.clip(round(np.mean(br_ints) if br_ints else 1), 1, 5))
+unit_for_lines = "apartment" if any(u["type"] == "apartment" for u in units) else "townhome"
+aff_col = pick_afford_col(line_bedrooms, unit_for_lines)
+lines = affordability_lines(selected_regions, ami_list, aff_col)
 
-# -------------------- PLOTTING --------------------
-if unit_labels and development_costs and any(development_costs):
+# -------------------- PLOT --------------------
+if labels and tdcs:
     fig, ax1 = plt.subplots(figsize=(12, 6))
-
-    bars = ax1.bar(unit_labels, development_costs, color='skyblue', edgecolor='black')
-    ymax = max(development_costs) * 1.1
+    bars = ax1.bar(labels, tdcs, color="skyblue", edgecolor="black")
+    ymax = max(tdcs + (list(lines.values()) or [0])) * 1.12
     ax1.set_ylim(0, ymax)
 
-    for bar in bars:
-        yval = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width() / 2, yval + (ymax * 0.02), f"${yval:,.0f}", ha='center', va='bottom', fontsize=9)
+    for b in bars:
+        y = b.get_height()
+        ax1.text(b.get_x() + b.get_width()/2, y + (ymax*0.02), f"${y:,.0f}",
+                 ha="center", va="bottom", fontsize=9)
 
-    for i, (label, value) in enumerate(affordability_lines.items()):
-        ax1.axhline(y=value, linestyle='--', color=f"C{i}", label=label)
+    for i, (lab, val) in enumerate(lines.items()):
+        ax1.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
 
-    ax1.yaxis.set_major_formatter(FuncFormatter(lambda x, _: '${:,.0f}'.format(x)))
     ax1.set_ylabel("Development Cost ($)")
+    ax1.set_xlabel("Unit Type and Size")
+    ax1.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"${x:,.0f}"))
     plt.xticks(rotation=20)
     plt.title("Development Cost vs. Affordable Purchase Price Thresholds")
-    if affordability_lines:
-        ax1.legend()
-
-    ax2 = ax1.twinx()
-    ax2.set_ylim(ax1.get_ylim())
-    ax2.set_yticks(list(affordability_lines.values()))
-    ax2.set_yticklabels([f"{k.split()[0]}\n${affordability_lines[k]:,.0f}" for k in affordability_lines])
-    ax2.set_ylabel("Max. Affordable Purchase Price by % AMI")
+    if lines:
+        ax1.legend(loc="upper right")
+        ax2 = ax1.twinx()
+        ax2.set_ylim(ax1.get_ylim())
+        vals = list(lines.values())
+        labs = [f"{k.split()[0]}\n${lines[k]:,.0f}" for k in lines]
+        ax2.set_yticks(vals)
+        ylabel = ("Max. Affordable Purchase Price by % AMI"
+                  if "buy" in aff_col else
+                  "Max. Affordable Gross Rent by % AMI (incl. utilities) — TODO Apartment")
+        ax2.set_ylabel(ylabel)
+        ax2.set_yticklabels(labs)
 
     fig.tight_layout()
     st.pyplot(fig)
+else:
+    st.info("No valid unit data provided.")
 
-st.markdown("[VHFA Housing Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
+st.caption("Apartment path currently uses a rent-column placeholder. We’ll wire rent thresholds when you’re ready.")
