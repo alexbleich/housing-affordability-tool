@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from pathlib import Path
 
-# -------------------- FILE PATHS (repo-relative) --------------------
+# -------------------- PATHS --------------------
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
 ASSUMPTIONS_CSV = DATA_DIR / "assumptions.csv"
@@ -19,11 +19,10 @@ REGION_FILES = {
     "Vermont":    DATA_DIR / "vermont_ami.csv",
 }
 
-# -------------------- LOAD DATA --------------------
+# -------------------- LOADERS --------------------
 @st.cache_data
 def load_assumptions(p: Path) -> pd.DataFrame:
     df = pd.read_csv(p)
-    # normalize text cols
     for c in ["category", "parent_option", "option", "value_type", "unit"]:
         if c in df.columns:
             df[c] = df[c].astype(str).str.strip().str.lower()
@@ -44,7 +43,47 @@ def load_regions(files: dict) -> dict:
 assump = load_assumptions(ASSUMPTIONS_CSV)
 regions = load_regions(REGION_FILES)
 
-# -------------------- HELPERS --------------------
+# -------------------- PRETTY LABELS --------------------
+PRETTY_MAP = {
+    # housing types
+    "townhome": "Townhome", "condo": "Condo", "apartment": "Apartment",
+    # energy code
+    "base_me_nh_code": "Base ME/NH Code",
+    "vt_energy_code": "VT Energy Code",
+    "evt_high_eff": "EVT High‑Efficient",
+    "passive_house": "Passive House",
+    # energy source
+    "natural_gas": "Natural Gas Heating",
+    "all_electric": "All‑Electric",
+    "geothermal": "Geothermal",
+    # infrastructure
+    "yes": "Yes", "no": "No",
+    # finish quality
+    "above_average": "Above Average", "average": "Average", "below_average": "Below Average",
+    # bedroom labels (leave numeric as-is)
+    "studio": "Studio",
+}
+
+def pretty(s: str) -> str:
+    s = str(s).lower().strip()
+    if s in PRETTY_MAP:
+        return PRETTY_MAP[s]
+    # generic prettifier
+    txt = s.replace("_", " ").title()
+    txt = (txt.replace(" Ami", " AMI")
+              .replace(" Vt ", " VT ")
+              .replace(" Nh ", " NH ")
+              .replace(" Me ", " ME ")
+              .replace(" Evt ", " EVT ")
+              .replace(" Mf ", " MF "))
+    return txt
+
+def select_with_pretty(label, options, key, index=0):
+    labels = [pretty(o) for o in options]
+    chosen = st.selectbox(label, labels, index=index, key=key)
+    return options[labels.index(chosen)]
+
+# -------------------- ASSUMPTION HELPERS --------------------
 def rows(category, option=None, parent=None):
     q = assump["category"].eq(category)
     if parent is not None:
@@ -70,17 +109,23 @@ def bedroom_sf(housing_type: str, bedroom_label: str) -> float:
     return float(r.iloc[0]["value"]) if not r.empty else np.nan
 
 def percent_val(category: str, option: str) -> float:
-    r = rows(category, option=option)
+    r = rows(category, option=option, parent="default")
+    if r.empty:  # allow no parent rows too
+        r = rows(category, option=option)
     return float(r.iloc[0]["value"]) if not r.empty else 0.0
 
 def per_sf_val(category: str, option: str) -> float:
-    r = rows(category, option=option)
+    r = rows(category, option=option, parent="default")
+    if r.empty:
+        r = rows(category, option=option)
     if r.empty or r.iloc[0]["value_type"] != "per_sf":
         return 0.0
     return float(r.iloc[0]["value"])
 
 def total_val(category: str, option: str) -> float:
-    r = rows(category, option=option)
+    r = rows(category, option=option, parent="default")
+    if r.empty:
+        r = rows(category, option=option)
     if r.empty or r.iloc[0]["value_type"] != "total":
         return 0.0
     return float(r.iloc[0]["value"])
@@ -88,12 +133,12 @@ def total_val(category: str, option: str) -> float:
 def pick_afford_col(bedrooms_int: int, unit_type: str) -> str:
     """
     Townhome/Condo -> purchase thresholds 'buy{1..5}'
-    Apartment -> rent thresholds 'rent{0..5}' (placeholder until you wire rent logic)
+    Apartment -> rent thresholds 'rent{0..5}' (placeholder for later)
     """
     b = int(np.clip(bedrooms_int, 0, 5))
     if unit_type in ("townhome", "condo"):
         return f"buy{max(1, b)}"
-    return f"rent{b}"  # TODO: map apartments to rent thresholds
+    return f"rent{b}"  # TODO: wire true rent logic later
 
 def affordability_lines(selected_regions, amis, column_name):
     lines = {}
@@ -109,15 +154,12 @@ def compute_tdc(sf: float, utype: str, energy_code: str, energy_source: str,
                 infrastructure: str, finish_quality: str) -> float:
     base = baseline_per_sf()                 # e.g., 400 $/sf
     base_eff = base * mf_factor(utype)       # apply MF factor to baseline $/sf
-
     pct_total = (percent_val("energy_code", energy_code)
                  + percent_val("finish_quality", finish_quality))
     add_per_sf_from_pct = base * (pct_total / 100.0)
-
     add_per_sf_energy = per_sf_val("energy_source", energy_source)
     infra_total = total_val("infrastructure", infrastructure)
     infra_per_sf = per_sf_val("infrastructure", infrastructure)
-
     per_sf_sum = base_eff + add_per_sf_from_pct + add_per_sf_energy + infra_per_sf
     return sf * per_sf_sum + infra_total
 
@@ -133,25 +175,40 @@ housing_types = ["townhome", "condo", "apartment"]
 for i in range(num_units):
     st.subheader(f"Unit {i+1}")
     with st.container(border=True):
-        utype = st.selectbox("Unit type",
-                             [x.title() for x in housing_types],
-                             index=0, key=f"type_{i}").lower()
+        utype = select_with_pretty("Unit type", housing_types, key=f"type_{i}", index=0)
 
+        # Bedrooms for this housing type
         br_opts = list_options("bedrooms", parent=utype) or ["2"]
-        br = st.selectbox("Number of bedrooms", br_opts, key=f"br_{i}")
+        # keep stable ordering; default to 2 if present
+        default_idx = br_opts.index("2") if "2" in br_opts else min(1, len(br_opts)-1)
+        br = select_with_pretty("Number of bedrooms", br_opts, key=f"br_{i}", index=default_idx)
 
         sf = bedroom_sf(utype, br)
         if np.isnan(sf):
             st.warning("No SF mapping found for this selection; defaulting to 1,000 sf.")
             sf = 1000.0
 
-        # Display MF factor being applied
+        # MF factor display
         st.caption(f"MF Efficiency Factor: {int(round(mf_factor(utype)*100))}% (applied to baseline $/sf)")
 
-        code_choice   = st.selectbox("Energy code standard", list_options("energy_code", "default") or ["base_me_nh_code"], key=f"code_{i}")
-        source_choice = st.selectbox("Energy source",        list_options("energy_source", "default") or ["natural_gas"],    key=f"src_{i}")
-        infra_choice  = st.selectbox("Infrastructure required?", list_options("infrastructure", "default") or ["no", "yes"], key=f"infra_{i}")
-        finish_choice = st.selectbox("Finish quality",       list_options("finish_quality", "default") or ["average"],       key=f"finish_{i}")
+        code_choice   = select_with_pretty("Energy code standard",
+                                           list_options("energy_code", parent="default") or ["base_me_nh_code"],
+                                           key=f"code_{i}")
+        source_choice = select_with_pretty("Energy source",
+                                           list_options("energy_source", parent="default") or ["natural_gas"],
+                                           key=f"src_{i}")
+        infra_choice  = select_with_pretty("Infrastructure required?",
+                                           list_options("infrastructure", parent="default") or ["no", "yes"],
+                                           key=f"infra_{i}")
+        finish_choice = select_with_pretty("Finish quality",
+                                           list_options("finish_quality", parent="default") or ["average"],
+                                           key=f"finish_{i}")
+
+        st.caption(
+            f"Selected: {pretty(utype)} • {pretty(br)} BR • "
+            f"{pretty(code_choice)} • {pretty(source_choice)} • "
+            f"Infrastructure: {pretty(infra_choice)} • Finish: {pretty(finish_choice)}"
+        )
 
         units.append({
             "type": utype,
@@ -180,7 +237,7 @@ for j in range(num_amis):
 
 # -------------------- CALCULATE --------------------
 labels, tdcs, br_ints = [], [], []
-for u in units:
+for i, u in enumerate(units):
     # convert bedroom label -> int for thresholds (studio -> 0)
     if str(u["bed_label"]).lower() == "studio":
         b_int = 0
@@ -193,8 +250,11 @@ for u in units:
 
     tdcs.append(compute_tdc(u["sf"], u["type"], u["energy_code"], u["energy_source"],
                             u["infrastructure"], u["finish_quality"]))
-    labels.append(f"{int(u['sf'])}sf {u['type'].title()}")
 
+    # >>> UNIQUE, DESCRIPTIVE LABEL (prevents bar collapse even if type+SF match)
+    labels.append(f"Unit {i+1}: {int(u['sf'])}sf {pretty(u['type'])}")
+
+# Bedroom count for AMI lines = rounded mean across units (1–5)
 line_bedrooms = int(np.clip(round(np.mean(br_ints) if br_ints else 1), 1, 5))
 unit_for_lines = "apartment" if any(u["type"] == "apartment" for u in units) else "townhome"
 aff_col = pick_afford_col(line_bedrooms, unit_for_lines)
@@ -216,7 +276,7 @@ if labels and tdcs:
         ax1.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
 
     ax1.set_ylabel("Development Cost ($)")
-    ax1.set_xlabel("Unit Type and Size")
+    ax1.set_xlabel("Unit & Type")
     ax1.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"${x:,.0f}"))
     plt.xticks(rotation=20)
     plt.title("Development Cost vs. Affordable Purchase Price Thresholds")
