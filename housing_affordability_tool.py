@@ -19,6 +19,14 @@ REGION_FILES = {
     "Vermont":    DATA_DIR / "vermont_ami.csv",
 }
 
+# Public-facing names for the region selector
+REGION_PRETTY = {
+    "Chittenden": "Chittenden",
+    "Addison": "Addison",
+    "Vermont": "Rest of Vermont",
+}
+PRETTY_TO_REGION = {v: k for k, v in REGION_PRETTY.items()}
+
 # -------------------- LOADERS --------------------
 @st.cache_data
 def load_assumptions(p: Path) -> pd.DataFrame:
@@ -60,7 +68,7 @@ PRETTY_MAP = {
     "yes": "Yes", "no": "No",
     # finish quality
     "above_average": "Above Average", "average": "Average", "below_average": "Below Average",
-    # bedroom labels (leave numeric as-is)
+    # bedroom label
     "studio": "Studio",
 }
 
@@ -68,7 +76,6 @@ def pretty(s: str) -> str:
     s = str(s).lower().strip()
     if s in PRETTY_MAP:
         return PRETTY_MAP[s]
-    # generic prettifier
     txt = s.replace("_", " ").title()
     txt = (txt.replace(" Ami", " AMI")
               .replace(" Vt ", " VT ")
@@ -110,7 +117,7 @@ def bedroom_sf(housing_type: str, bedroom_label: str) -> float:
 
 def percent_val(category: str, option: str) -> float:
     r = rows(category, option=option, parent="default")
-    if r.empty:  # allow no parent rows too
+    if r.empty:
         r = rows(category, option=option)
     return float(r.iloc[0]["value"]) if not r.empty else 0.0
 
@@ -119,14 +126,6 @@ def per_sf_val(category: str, option: str) -> float:
     if r.empty:
         r = rows(category, option=option)
     if r.empty or r.iloc[0]["value_type"] != "per_sf":
-        return 0.0
-    return float(r.iloc[0]["value"])
-
-def total_val(category: str, option: str) -> float:
-    r = rows(category, option=option, parent="default")
-    if r.empty:
-        r = rows(category, option=option)
-    if r.empty or r.iloc[0]["value_type"] != "total":
         return 0.0
     return float(r.iloc[0]["value"])
 
@@ -147,21 +146,25 @@ def affordability_lines(selected_regions, amis, column_name):
         for ami in amis:
             r = df[df["ami"].eq(ami / 100.0)]
             if not r.empty and column_name in r.columns:
-                lines[f"{ami}% AMI - {region}"] = float(r.iloc[0][column_name])
+                lines[f"{ami}% AMI - {REGION_PRETTY.get(region, region)}"] = float(r.iloc[0][column_name])
     return lines
 
 def compute_tdc(sf: float, utype: str, energy_code: str, energy_source: str,
                 infrastructure: str, finish_quality: str) -> float:
     base = baseline_per_sf()                 # e.g., 400 $/sf
     base_eff = base * mf_factor(utype)       # apply MF factor to baseline $/sf
+
+    # % add-ons (applied to the baseline $/sf, per your spec)
     pct_total = (percent_val("energy_code", energy_code)
                  + percent_val("finish_quality", finish_quality))
     add_per_sf_from_pct = base * (pct_total / 100.0)
+
+    # $/sf add-ons (energy source + infrastructure)
     add_per_sf_energy = per_sf_val("energy_source", energy_source)
-    infra_total = total_val("infrastructure", infrastructure)
-    infra_per_sf = per_sf_val("infrastructure", infrastructure)
+    infra_per_sf = per_sf_val("infrastructure", infrastructure)  # <-- Infrastructure is $/sf only
+
     per_sf_sum = base_eff + add_per_sf_from_pct + add_per_sf_energy + infra_per_sf
-    return sf * per_sf_sum + infra_total
+    return sf * per_sf_sum
 
 # -------------------- UI --------------------
 st.title("🏘️ Housing Affordability Visualizer")
@@ -179,7 +182,6 @@ for i in range(num_units):
 
         # Bedrooms for this housing type
         br_opts = list_options("bedrooms", parent=utype) or ["2"]
-        # keep stable ordering; default to 2 if present
         default_idx = br_opts.index("2") if "2" in br_opts else min(1, len(br_opts)-1)
         br = select_with_pretty("Number of bedrooms", br_opts, key=f"br_{i}", index=default_idx)
 
@@ -188,7 +190,6 @@ for i in range(num_units):
             st.warning("No SF mapping found for this selection; defaulting to 1,000 sf.")
             sf = 1000.0
 
-        # MF factor display
         st.caption(f"MF Efficiency Factor: {int(round(mf_factor(utype)*100))}% (applied to baseline $/sf)")
 
         code_choice   = select_with_pretty("Energy code standard",
@@ -222,8 +223,11 @@ for i in range(num_units):
 
 # -------------------- Income thresholds --------------------
 st.subheader("Income Thresholds")
-region_opts = list(REGION_FILES.keys())
-selected_regions = st.multiselect("Select region(s)", region_opts, default=["Chittenden"])
+
+# Show pretty names, map back to internal keys
+region_pretty_opts = [REGION_PRETTY[k] for k in REGION_FILES.keys()]
+selected_pretty = st.multiselect("Select region(s)", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
+selected_regions = [PRETTY_TO_REGION[p] for p in selected_pretty]
 
 valid_ami_values = [30] + list(range(50, 155, 5))
 num_amis = st.slider("How many AMI levels?", 1, 3, 2)
@@ -250,8 +254,7 @@ for i, u in enumerate(units):
 
     tdcs.append(compute_tdc(u["sf"], u["type"], u["energy_code"], u["energy_source"],
                             u["infrastructure"], u["finish_quality"]))
-
-    # >>> UNIQUE, DESCRIPTIVE LABEL (prevents bar collapse even if type+SF match)
+    # Unique label so bars never collapse
     labels.append(f"Unit {i+1}: {int(u['sf'])}sf {pretty(u['type'])}")
 
 # Bedroom count for AMI lines = rounded mean across units (1–5)
