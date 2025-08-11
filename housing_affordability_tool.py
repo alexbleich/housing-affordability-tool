@@ -1,6 +1,19 @@
-# housing_affordability_tool.py
-# Streamlit app: Housing Affordability Visualizer
-# Uses CSVs in ./data: assumptions.csv, {addison|chittenden|vermont}_ami.csv
+"""
+Housing Affordability Visualizer
+
+Interactive Streamlit app that compares estimated total development cost (TDC) for selected
+unit types against income-based affordability thresholds across Vermont regions.
+Pick housing type, bedrooms (with assumed SF), and project assumptions (energy code,
+energy source, infrastructure, finish quality). Then choose region(s) and AMI levels to
+see a side‑by‑side chart of what it costs to build versus what households can afford.
+
+Purpose: illustrate how current development costs often exceed income-based purchase
+(or rent, for apartments) thresholds, limiting demand and discouraging new market-rate
+housing construction in Vermont.
+
+Author: Alex Bleich
+Last updated: August 11, 2025
+"""
 
 import pandas as pd
 import numpy as np
@@ -61,7 +74,7 @@ PRETTY_MAP = {
     "evt_high_eff": "EVT High‑Efficient",
     "passive_house": "Passive House",
     # energy source
-    "natural_gas": "Natural Gas Heating",
+    "natural_gas": "Natural Gas",
     "all_electric": "All‑Electric",
     "geothermal": "Geothermal",
     # infrastructure
@@ -89,6 +102,13 @@ def select_with_pretty(label, options, key, index=0):
     labels = [pretty(o) for o in options]
     chosen = st.selectbox(label, labels, index=index, key=key)
     return options[labels.index(chosen)]
+
+def idx_of(options, raw_value, fallback_index=0):
+    raw_value = str(raw_value).lower()
+    try:
+        return options.index(raw_value)
+    except ValueError:
+        return min(max(fallback_index, 0), max(len(options)-1, 0))
 
 # -------------------- ASSUMPTION HELPERS --------------------
 def rows(category, option=None, parent=None):
@@ -154,14 +174,14 @@ def compute_tdc(sf: float, utype: str, energy_code: str, energy_source: str,
     base = baseline_per_sf()                 # e.g., 400 $/sf
     base_eff = base * mf_factor(utype)       # apply MF factor to baseline $/sf
 
-    # % add-ons (applied to the baseline $/sf, per your spec)
+    # % add-ons (applied to the baseline $/sf, per spec)
     pct_total = (percent_val("energy_code", energy_code)
                  + percent_val("finish_quality", finish_quality))
     add_per_sf_from_pct = base * (pct_total / 100.0)
 
-    # $/sf add-ons (energy source + infrastructure)
+    # $/sf add-ons (energy source + infrastructure) — infrastructure is $/sf only
     add_per_sf_energy = per_sf_val("energy_source", energy_source)
-    infra_per_sf = per_sf_val("infrastructure", infrastructure)  # <-- Infrastructure is $/sf only
+    infra_per_sf = per_sf_val("infrastructure", infrastructure)
 
     per_sf_sum = base_eff + add_per_sf_from_pct + add_per_sf_energy + infra_per_sf
     return sf * per_sf_sum
@@ -178,13 +198,15 @@ housing_types = ["townhome", "condo", "apartment"]
 for i in range(num_units):
     st.subheader(f"Unit {i+1}")
     with st.container(border=True):
+        # Unit type (default to Townhome)
         utype = select_with_pretty("Unit type", housing_types, key=f"type_{i}", index=0)
 
-        # Bedrooms for this housing type
+        # Bedrooms (default to "2" if available)
         br_opts = list_options("bedrooms", parent=utype) or ["2"]
         default_idx = br_opts.index("2") if "2" in br_opts else min(1, len(br_opts)-1)
         br = select_with_pretty("Number of bedrooms", br_opts, key=f"br_{i}", index=default_idx)
 
+        # SF mapping
         sf = bedroom_sf(utype, br)
         if np.isnan(sf):
             st.warning("No SF mapping found for this selection; defaulting to 1,000 sf.")
@@ -192,18 +214,34 @@ for i in range(num_units):
 
         st.caption(f"MF Efficiency Factor: {int(round(mf_factor(utype)*100))}% (applied to baseline $/sf)")
 
-        code_choice   = select_with_pretty("Energy code standard",
-                                           list_options("energy_code", parent="default") or ["base_me_nh_code"],
-                                           key=f"code_{i}")
+        # Defaults requested:
+        # Energy code standard = "VT Energy Code"
+        code_opts = list_options("energy_code", parent="default") or ["base_me_nh_code", "vt_energy_code"]
+        code_choice = select_with_pretty("Energy code standard",
+                                         code_opts,
+                                         key=f"code_{i}",
+                                         index=idx_of(code_opts, "vt_energy_code"))
+
+        # Energy source = "Natural Gas"
+        src_opts = list_options("energy_source", parent="default") or ["natural_gas"]
         source_choice = select_with_pretty("Energy source",
-                                           list_options("energy_source", parent="default") or ["natural_gas"],
-                                           key=f"src_{i}")
-        infra_choice  = select_with_pretty("Infrastructure required?",
-                                           list_options("infrastructure", parent="default") or ["no", "yes"],
-                                           key=f"infra_{i}")
+                                           src_opts,
+                                           key=f"src_{i}",
+                                           index=idx_of(src_opts, "natural_gas"))
+
+        # Infrastructure required = "No"
+        infra_opts = list_options("infrastructure", parent="default") or ["no", "yes"]
+        infra_choice = select_with_pretty("Infrastructure required?",
+                                          infra_opts,
+                                          key=f"infra_{i}",
+                                          index=idx_of(infra_opts, "no"))
+
+        # Finish quality = "Average"
+        finish_opts = list_options("finish_quality", parent="default") or ["average", "above_average", "below_average"]
         finish_choice = select_with_pretty("Finish quality",
-                                           list_options("finish_quality", parent="default") or ["average"],
-                                           key=f"finish_{i}")
+                                           finish_opts,
+                                           key=f"finish_{i}",
+                                           index=idx_of(finish_opts, "average"))
 
         st.caption(
             f"Selected: {pretty(utype)} • {pretty(br)} BR • "
@@ -224,7 +262,6 @@ for i in range(num_units):
 # -------------------- Income thresholds --------------------
 st.subheader("Income Thresholds")
 
-# Show pretty names, map back to internal keys
 region_pretty_opts = [REGION_PRETTY[k] for k in REGION_FILES.keys()]
 selected_pretty = st.multiselect("Select region(s)", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
 selected_regions = [PRETTY_TO_REGION[p] for p in selected_pretty]
@@ -254,7 +291,7 @@ for i, u in enumerate(units):
 
     tdcs.append(compute_tdc(u["sf"], u["type"], u["energy_code"], u["energy_source"],
                             u["infrastructure"], u["finish_quality"]))
-    # Unique label so bars never collapse
+    # Unique label so bars never collapse, even if type + SF match
     labels.append(f"Unit {i+1}: {int(u['sf'])}sf {pretty(u['type'])}")
 
 # Bedroom count for AMI lines = rounded mean across units (1–5)
