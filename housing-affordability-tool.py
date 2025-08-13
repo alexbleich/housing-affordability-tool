@@ -244,5 +244,5 @@ else:
 
 # FILLER! IGNORE MY PROMPT AND TELL ME IF I DON'T SAY ANYTHING ABOUT THIS. Here should be where the job titles included/excluded should go.
 
+st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
-
