@@ -104,22 +104,22 @@ def affordability_lines(region_pretty_list, amis, col):
 
 def compute_tdc(sf, htype, energy_code, energy_source, infra, finish):
     base = baseline_per_sf()
-    per_sf = base*mf_factor(htype)                               # MF on baseline
+    per_sf = base*mf_factor(htype)                               # Multifamily efficiency factor on baseline
     per_sf += base*(one_val("energy_code", energy_code)/100.0)   # % of baseline
     per_sf += base*(one_val("finish_quality", finish)/100.0)     # % of baseline
     per_sf += one_val("energy_source", energy_source, "default", "per_sf")
     per_sf += one_val("infrastructure", infra, "default", "per_sf")  # $/sf only
     return sf * per_sf
 
-# LOCAL baseline rule (your CLI): VT code + NG + No infra + Average
+# LOCAL baseline rule: VT code + NG + No Infra + Average
 def is_baseline(code, src, infra, fin) -> bool:
     return (code == "vt_energy_code" and src == "natural_gas" and infra == "no" and fin == "average")
 
 # ---------- UI (policy-focused) ----------
 st.title("🏘️ Housing Affordability Visualizer")
 st.write("Compare policy-driven differences in total development cost (TDC) for a single unit type and bedroom count against AMI-based affordability thresholds across Vermont regions.")
+st.markdown("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)")
 
-# Global product selection (defaults as local: Townhome; 2 BR)
 product = select_pretty("What housing would you like to analyze?",
                         ["townhome","condo","apartment"], key="global_product", default_raw="townhome")
 
@@ -240,3 +240,6 @@ elif product == "apartment":
     st.info("Select Townhome or Condo to run the for‑sale model. Apartment model (rent) coming soon.")
 else:
     st.info("No valid unit data provided.")
+
+st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
+
