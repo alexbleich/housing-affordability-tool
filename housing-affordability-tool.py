@@ -121,7 +121,7 @@ st.write("Compare how policy choices affect total development cost (TDC) for a s
 st.markdown("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)")
 st.write("")
 
-product = select_pretty("What housing would you like to analyze?",
+product = select_pretty("What type of housing would you like to analyze?",
                         ["townhome","condo","apartment"], key="global_product", default_raw="townhome")
 
 if product in ("townhome","condo"):
@@ -144,7 +144,7 @@ num_units = st.slider("How many units would you like to compare?", 1, 5, 2, disa
 units=[]
 disabled_block = (product=="apartment")
 for i in range(num_units):
-    st.subheader(f"Unit {i+1}")
+    st.subheader(f"{product} {i+1}")
     with st.container(border=True):
         code = select_pretty("Energy code standard",
                              options("energy_code","default") or ["vt_energy_code"],
