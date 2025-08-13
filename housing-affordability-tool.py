@@ -144,7 +144,7 @@ num_units = st.slider("How many units would you like to compare?", 1, 5, 2, disa
 units=[]
 disabled_block = (product=="apartment")
 for i in range(num_units):
-    st.subheader(f"{product} {i+1}")
+    st.subheader(f"{pretty(product)} {i+1}")
     with st.container(border=True):
         code = select_pretty("Energy code standard",
                              options("energy_code","default") or ["vt_energy_code"],
