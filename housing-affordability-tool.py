@@ -1,25 +1,4 @@
-"""
-Housing Affordability Visualizer
-
-Compare policy-driven differences in total development cost (TDC) for a single
-unit type and bedroom count against AMI-based affordability thresholds across
-Vermont regions.
-
-Workflow:
-1) Pick the housing type (Townhome/Condo/Apartment).
-   - If Townhome/Condo: select bedrooms (assumed SF is applied).
-   - If Apartment: placeholder for future rent model (disabled for now).
-2) Choose how many units to compare.
-3) For each unit, pick policy assumptions (energy code, source, infrastructure, finish).
-4) See a side-by-side chart of TDC vs affordability thresholds.
-
-Bars labeled "Baseline {UnitType}" when the policy choices match:
-Bedrooms = 2, Energy Code = Base ME/NH Code, Energy Source = Natural Gas,
-Infrastructure = No, Finish = Average.
-
-Author: Alex Bleich
-Last updated: August 11, 2025
-"""
+# housing_affordability_tool.py — Streamlit, matches local chart output
 
 from pathlib import Path
 import numpy as np
@@ -62,14 +41,13 @@ def load_regions(files: dict) -> dict:
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
 
-# ---------- Small utilities ----------
+# ---------- Pretty labels & helpers ----------
 PRETTY_OVERRIDES = {
     "townhome":"Townhome","condo":"Condo","apartment":"Apartment",
-    "base_me_nh_code":"Base ME/NH Code","vt_energy_code":"VT Energy Code",
-    "evt_high_eff":"EVT High‑Efficient","passive_house":"Passive House",
-    "natural_gas":"Natural Gas","all_electric":"All‑Electric","geothermal":"Geothermal",
-    "yes":"Yes","no":"No",
-    "above_average":"Above Average","average":"Average","below_average":"Below Average",
+    "base_me_nh_code":"ME/NH Base Code","vt_energy_code":"VT Energy Code",
+    "evt_high_eff":"EVT High-Efficient","passive_house":"Passive House",
+    "natural_gas":"Natural Gas Heating","all_electric":"All Electric","geothermal":"Geothermal",
+    "yes":"Yes","no":"No","above_average":"Above Average","average":"Average","below_average":"Below Average",
     "studio":"Studio",
 }
 def pretty(s:str)->str:
@@ -90,16 +68,16 @@ def options(cat, parent=None):
 
 def one_val(cat, opt, parent=None, expect_type=None):
     r = rows(cat, opt, parent)
-    if r.empty and parent is not None: r = rows(cat, opt)  # fallback
+    if r.empty and parent is not None: r = rows(cat, opt)
     if r.empty: return 0.0
     if expect_type and r.iloc[0]["value_type"] != expect_type: return 0.0
     return float(r.iloc[0]["value"])
 
-def select_pretty(label, raw_options, key, default_raw=None):
+def select_pretty(label, raw_options, key, default_raw=None, disabled=False):
     raw_options = list(raw_options)
     labels = [pretty(o) for o in raw_options]
     idx = raw_options.index(default_raw) if default_raw in raw_options else 0
-    chosen = st.selectbox(label, labels, index=idx, key=key)
+    chosen = st.selectbox(label, labels, index=idx, key=key, disabled=disabled)
     return raw_options[labels.index(chosen)]
 
 def bedroom_sf(h_type, br_label):
@@ -129,31 +107,26 @@ def compute_tdc(sf, htype, energy_code, energy_source, infra, finish):
     per_sf = base*mf_factor(htype)                               # MF on baseline
     per_sf += base*(one_val("energy_code", energy_code)/100.0)   # % of baseline
     per_sf += base*(one_val("finish_quality", finish)/100.0)     # % of baseline
-    per_sf += one_val("energy_source", energy_source, expect_type="per_sf")
-    per_sf += one_val("infrastructure", infra, expect_type="per_sf")  # $/sf only
+    per_sf += one_val("energy_source", energy_source, "default", "per_sf")
+    per_sf += one_val("infrastructure", infra, "default", "per_sf")  # $/sf only
     return sf * per_sf
 
-def is_baseline_selection(bedrooms, code, source, infra, finish) -> bool:
-    return (bedrooms == "2"
-            and code   == "base_me_nh_code"
-            and source == "natural_gas"
-            and infra  == "no"
-            and finish == "average")
+# LOCAL baseline rule (your CLI): VT code + NG + No infra + Average
+def is_baseline(code, src, infra, fin) -> bool:
+    return (code == "vt_energy_code" and src == "natural_gas" and infra == "no" and fin == "average")
 
-# ---------- UI ----------
+# ---------- UI (policy-focused) ----------
 st.title("🏘️ Housing Affordability Visualizer")
-st.write("Compare unit development costs with AMI-based affordability thresholds across Vermont regions.")
+st.write("Compare policy-driven differences in total development cost (TDC) for a single unit type and bedroom count against AMI-based affordability thresholds across Vermont regions.")
 
-# 1) Global product selection
+# Global product selection (defaults as local: Townhome; 2 BR)
 product = select_pretty("What housing would you like to analyze?",
                         ["townhome","condo","apartment"], key="global_product", default_raw="townhome")
 
-# 2a / 2b) Bedrooms only for for-sale products
 if product in ("townhome","condo"):
     br_opts_global = options("bedrooms", parent=product) or ["2"]
     br_default = "2" if "2" in br_opts_global else br_opts_global[0]
     bedrooms_global = select_pretty("Number of bedrooms", br_opts_global, key="global_bedrooms", default_raw=br_default)
-    # derive SF once from global choices
     sf_global = bedroom_sf(product, bedrooms_global)
     if np.isnan(sf_global):
         st.warning("No SF mapping found; defaulting to 1,000 sf.")
@@ -163,90 +136,104 @@ else:
     sf_global = None
     st.info("Apartment modeling (rent-based) coming soon. For now, choose Townhome or Condo to compare for-sale products.")
 
-# 3) Number of units to compare
+# Units to compare (local default = 2)
 num_units = st.slider("How many units would you like to compare?", 1, 5, 2, disabled=(product=="apartment"))
 
+# Per-unit policy choices (defaults to local)
 units=[]
-policy_block_disabled = (product=="apartment")
+disabled_block = (product=="apartment")
 for i in range(num_units):
     st.subheader(f"Unit {i+1}")
     with st.container(border=True):
         code = select_pretty("Energy code standard",
-                             options("energy_code","default") or ["base_me_nh_code","vt_energy_code"],
-                             key=f"code_{i}", default_raw="vt_energy_code") if not policy_block_disabled else "vt_energy_code"
+                             options("energy_code","default") or ["vt_energy_code"],
+                             key=f"code_{i}", default_raw="vt_energy_code", disabled=disabled_block)
         src  = select_pretty("Energy source",
                              options("energy_source","default") or ["natural_gas"],
-                             key=f"src_{i}", default_raw="natural_gas") if not policy_block_disabled else "natural_gas"
+                             key=f"src_{i}", default_raw="natural_gas", disabled=disabled_block)
         infra= select_pretty("Infrastructure required?",
                              options("infrastructure","default") or ["no","yes"],
-                             key=f"infra_{i}", default_raw="no") if not policy_block_disabled else "no"
+                             key=f"infra_{i}", default_raw="no", disabled=disabled_block)
         fin  = select_pretty("Finish quality",
                              options("finish_quality","default") or ["average","above_average","below_average"],
-                             key=f"fin_{i}", default_raw="average") if not policy_block_disabled else "average"
-
-        if policy_block_disabled:
-            st.caption("Policy selection disabled for Apartment placeholder.")
-
+                             key=f"fin_{i}", default_raw="average", disabled=disabled_block)
+        if disabled_block: st.caption("Policy selection disabled for Apartment placeholder.")
         units.append(dict(code=code, src=src, infra=infra, fin=fin))
 
-# ---------- Income thresholds ----------
+# Income Thresholds (local defaults: region = Chittenden; AMIs = one level, 150)
 st.subheader("Income Thresholds")
 region_pretty_opts = [REGION_PRETTY[k] for k in REGIONS]
 sel_regions_pretty = st.multiselect("Select region(s)", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
-
 valid_amis = [30] + list(range(50,155,5))
-n_amis = st.slider("How many AMI levels?", 1, 3, 2)
-amis = [st.selectbox(f"AMI value #{j+1}", valid_amis,
-                     index=valid_amis.index(100 if j==0 else 150), key=f"ami_{j}") for j in range(n_amis)]
+n_amis = st.slider("How many AMI levels?", 1, 3, 1)  # local default 1
+amis = [st.selectbox(f"AMI value #1", valid_amis, index=valid_amis.index(150), key="ami_0")]
 
-# ---------- Compute (only for for-sale products) ----------
-labels, tdc_vals = [], []
-if product in ("townhome","condo"):
-    for i,u in enumerate(units):
-        # label: Baseline {UnitType} if baseline recipe is selected (only for BR=2)
-        is_baseline = is_baseline_selection(bedrooms_global, u["code"], u["src"], u["infra"], u["fin"])
-        label = f"Baseline {pretty(product)}" if is_baseline else f"Unit {i+1}"
+# ---------- Compute & Plot (for-sale only) ----------
+labels, tdc_vals, lines = [], [], {}
+if product in ("townhome","condo") and units:
+    for i,u in enumerate(units, start=1):
+        label = f"Baseline {pretty(product)}" if is_baseline(u["code"], u["src"], u["infra"], u["fin"]) else f"{pretty(product)} {i}"
         labels.append(label)
-
         tdc_vals.append(compute_tdc(sf_global, product, u["code"], u["src"], u["infra"], u["fin"]))
 
-    # thresholds: based on the single global BR and product
-    br_int = 2 if bedrooms_global == "2" else (0 if bedrooms_global=="studio" else int(bedrooms_global))
-    aff_col = pick_afford_col(br_int, product)
+    b_int = 2 if bedrooms_global == "2" else (0 if bedrooms_global == "studio" else int(bedrooms_global))
+    aff_col = pick_afford_col(b_int, product)
     lines = affordability_lines(sel_regions_pretty, amis, aff_col)
-else:
-    labels, tdc_vals, lines = [], [], {}
 
-# ---------- Plot ----------
 if labels and tdc_vals:
-    fig, ax1 = plt.subplots(figsize=(12,6))
+    fig, ax1 = plt.subplots(figsize=(12, 6))
     bars = ax1.bar(labels, tdc_vals, color="skyblue", edgecolor="black")
     ymax = max(tdc_vals + (list(lines.values()) or [0])) * 1.12
     ax1.set_ylim(0, ymax)
 
+    # Value labels on top
     for b in bars:
         y = b.get_height()
-        ax1.text(b.get_x()+b.get_width()/2, y + (ymax*0.02), f"${y:,.0f}", ha="center", va="bottom", fontsize=9)
+        ax1.text(b.get_x() + b.get_width() / 2, y + (ymax * 0.02), f"${y:,.0f}",
+                 ha="center", va="bottom", fontsize=10)
 
-    for i,(lab,val) in enumerate(lines.items()):
+    # AMI lines
+    for i, (lab, val) in enumerate(lines.items()):
         ax1.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
 
+    # Axis labels to match local
     ax1.set_ylabel("Development Cost ($)")
-    ax1.set_xlabel("Scenario")
-    ax1.yaxis.set_major_formatter(FuncFormatter(lambda x,_: f"${x:,.0f}"))
+    ax1.set_xlabel("TDC from Selected Policy Choices")
+    ax1.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"${x:,.0f}"))
     plt.xticks(rotation=0)
-    plt.title(f"TDC vs. Affordable Thresholds — {pretty(product)}"
-              + (f", {pretty(bedrooms_global)} BR" if bedrooms_global else ""))
-    if lines: ax1.legend(loc="upper right")
+
+    # Title to match local
+    title = f"{pretty(bedrooms_global)} Bedroom {pretty(product)}: Policy-Impacted TDC vs. What Buyers Can Afford" \
+            if bedrooms_global else f"{pretty(product)}: Policy-Impacted TDC vs. What Buyers Can Afford"
+    plt.title(title)
 
     if lines:
-        ax2 = ax1.twinx(); ax2.set_ylim(ax1.get_ylim())
+        ax1.legend(loc="upper right")
+        ax2 = ax1.twinx()
+        ax2.set_ylim(ax1.get_ylim())
         vals = list(lines.values())
         ax2.set_yticks(vals)
         ax2.set_yticklabels([f"{k.split()[0]}\n${lines[k]:,.0f}" for k in lines])
-        ax2.set_ylabel("Max. Affordable Purchase Price by % AMI" if "buy" in aff_col
-                       else "Max. Affordable Gross Rent by % AMI (incl. utilities) — TODO Apartment")
+        ax2.set_ylabel("Max. Affordable Purchase Price by % AMI")
 
+    # Text blocks inside bars (policy choices), like your local plot
+    for (u), b in zip(units, bars):
+        x_center = b.get_x() + b.get_width()/2.0
+        bar_height = b.get_height()
+        txt = (
+            "Energy Code:\n"
+            f"{pretty(u['code'])}\n\n"
+            "Energy Source:\n"
+            f"{pretty(u['src'])}\n\n"
+            f"Infrastructure: {pretty(u['infra'])}\n\n"
+            "Finish Quality:\n"
+            f"{pretty(u['fin'])}"
+        )
+        ax1.text(x_center, bar_height * 0.05, txt, ha="center", va="bottom",
+                 fontsize=10, linespacing=1.25, color="black", clip_on=True)
+
+    # Match local layout spacing
+    fig.subplots_adjust(bottom=0.28)
     fig.tight_layout()
     st.pyplot(fig)
 elif product == "apartment":
