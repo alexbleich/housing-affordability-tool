@@ -116,7 +116,7 @@ def is_baseline(code, src, infra, fin) -> bool:
     return (code == "vt_energy_code" and src == "natural_gas" and infra == "no" and fin == "average")
 
 # ---------- UI (policy-focused) ----------
-st.title("🏘️ Housing Affordability Visualizer🏘️")
+st.title("🏘️Housing Affordability Visualizer🏘️")
 st.write("Compare how policy choices affect total development cost (TDC) for a single unit type and bedroom count with AMI-based affordability thresholds across Vermont.")
 st.markdown("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)")
 st.write("")
