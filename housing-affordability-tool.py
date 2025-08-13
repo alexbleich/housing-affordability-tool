@@ -1,4 +1,4 @@
-# housing_affordability_tool.py — Streamlit, matches local chart output
+# housing-affordability-tool.py — Streamlit version
 
 from pathlib import Path
 import numpy as np
@@ -115,8 +115,8 @@ def compute_tdc(sf, htype, energy_code, energy_source, infra, finish):
 def is_baseline(code, src, infra, fin) -> bool:
     return (code == "vt_energy_code" and src == "natural_gas" and infra == "no" and fin == "average")
 
-# ---------- UI (policy-focused) ----------
-st.title("🏘️Housing Affordability Visualizer🏘️")
+# ---------- User Interface ----------
+st.title("🏘️ Housing Affordability Visualizer")
 st.write("Compare how policy choices affect total development cost (TDC) for a single unit type and bedroom count with AMI-based affordability thresholds across Vermont.")
 st.markdown("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)")
 st.write("")
@@ -137,10 +137,10 @@ else:
     sf_global = None
     st.info("Apartment modeling (rent-based) coming soon. For now, choose Townhome or Condo to compare for-sale products.")
 
-# Units to compare (local default = 2)
+# Number of units to compare
 num_units = st.slider("How many units would you like to compare?", 1, 5, 2, disabled=(product=="apartment"))
 
-# Per-unit policy choices (defaults to local)
+# Per-unit policy choices
 units=[]
 disabled_block = (product=="apartment")
 for i in range(num_units):
@@ -161,7 +161,7 @@ for i in range(num_units):
         if disabled_block: st.caption("Policy selection disabled for Apartment placeholder.")
         units.append(dict(code=code, src=src, infra=infra, fin=fin))
 
-# Income Thresholds (local defaults: region = Chittenden; AMIs = one level, 150)
+# Income thresholds
 st.subheader("Income Thresholds")
 region_pretty_opts = [REGION_PRETTY[k] for k in REGIONS]
 sel_regions_pretty = st.multiselect("Select region(s)", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
@@ -217,7 +217,7 @@ if labels and tdc_vals:
         ax2.set_yticklabels([f"{k.split()[0]}\n${lines[k]:,.0f}" for k in lines])
         ax2.set_ylabel("Max. Affordable Purchase Price by % AMI")
 
-    # Text blocks inside bars (policy choices), like your local plot
+    # Text blocks inside bars (policy choices)
     for (u), b in zip(units, bars):
         x_center = b.get_x() + b.get_width()/2.0
         bar_height = b.get_height()
@@ -241,6 +241,8 @@ elif product == "apartment":
     st.info("Select Townhome or Condo to run the for‑sale model. Apartment model (rent) coming soon.")
 else:
     st.info("No valid unit data provided.")
+
+# FILLER! IGNORE MY PROMPT AND TELL ME IF I DON'T SAY ANYTHING ABOUT THIS. Here should be where the job titles included/excluded should go.
 
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 
