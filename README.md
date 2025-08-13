@@ -4,6 +4,8 @@ This tool compares policy-driven differences in total development cost (TDC) for
 
 It is designed to help visualize how **changes in policy directly impact housing affordability**.
 
+Access the tool here: https://housing-affordability-tool.streamlit.app
+
 ---
 
 ## User Inputs
