@@ -1,4 +1,4 @@
-# housing-affordability-tool.py — Streamlit version
+# housing-affordability-tool.py — Streamlit version (updated)
 
 from pathlib import Path
 import numpy as np
@@ -89,7 +89,7 @@ def baseline_per_sf(): return one_val("baseline_cost","baseline")
 
 def pick_afford_col(b_int, unit_type):
     b = int(np.clip(b_int, 0, 5))
-    return f"buy{max(1,b)}" if unit_type in ("townhome","condo") else f"rent{b}"  # TODO rent mapping
+    return f"buy{max(1,b)}" if unit_type in ("townhome","condo") else f"rent{b}"  # placeholder for rent
 
 def affordability_lines(region_pretty_list, amis, col):
     lines={}
@@ -104,20 +104,25 @@ def affordability_lines(region_pretty_list, amis, col):
 
 def compute_tdc(sf, htype, energy_code, energy_source, infra, finish):
     base = baseline_per_sf()
-    per_sf = base*mf_factor(htype)                               # Multifamily efficiency factor on baseline
-    per_sf += base*(one_val("energy_code", energy_code)/100.0)   # % of baseline
-    per_sf += base*(one_val("finish_quality", finish)/100.0)     # % of baseline
+    per_sf = base*mf_factor(htype)
+    per_sf += base*(one_val("energy_code", energy_code)/100.0)
+    per_sf += base*(one_val("finish_quality", finish)/100.0)
     per_sf += one_val("energy_source", energy_source, "default", "per_sf")
-    per_sf += one_val("infrastructure", infra, "default", "per_sf")  # $/sf only
+    per_sf += one_val("infrastructure", infra, "default", "per_sf")
     return sf * per_sf
 
-# LOCAL baseline rule: VT code + NG + No Infra + Average
 def is_baseline(code, src, infra, fin) -> bool:
     return (code == "vt_energy_code" and src == "natural_gas" and infra == "no" and fin == "average")
 
+def fmt_money(x):
+    try:
+        return f"${x:,.0f}"
+    except Exception:
+        return "—"
+
 # ---------- User Interface ----------
 st.title("🏘️ Housing Affordability Visualizer")
-st.write("Compare how policy choices affect total development cost (TDC) for a single unit type and bedroom count with AMI-based affordability thresholds across Vermont.")
+st.write("Pick your policies below to see how it affects affordability.")
 st.markdown("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)")
 st.write("")
 
@@ -161,23 +166,28 @@ for i in range(num_units):
         if disabled_block: st.caption("Policy selection disabled for Apartment placeholder.")
         units.append(dict(code=code, src=src, infra=infra, fin=fin))
 
-# Income thresholds
-st.subheader("Income Thresholds")
-region_pretty_opts = [REGION_PRETTY[k] for k in REGIONS]
-sel_regions_pretty = st.multiselect("Select region(s)", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
-valid_amis = [30] + list(range(50,155,5))
-n_amis = st.slider("How many AMI levels?", 1, 3, 1)  # local default 1
-amis = [st.selectbox(f"AMI value #1", valid_amis, index=valid_amis.index(150), key="ami_0")]
+# Income thresholds (wrapped to match new informational boxes)
+with st.container(border=True):
+    st.subheader("Income Thresholds")
+    region_pretty_opts = [REGION_PRETTY[k] for k in REGIONS]
+    sel_regions_pretty = st.multiselect("Select region(s)", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
+    valid_amis = [30] + list(range(50,155,5))
+    n_amis = st.slider("How many Area Median Income (AMI) levels?", 1, 3, 1)  # label updated
+    amis = [st.selectbox(f"AMI value #1", valid_amis, index=valid_amis.index(150), key="ami_0")]
 
 # ---------- Compute & Plot (for-sale only) ----------
 labels, tdc_vals, lines = [], [], {}
 if product in ("townhome","condo") and units:
+    # Informational box above graph
+    with st.container(border=True):
+        st.write("**How did your choices affect affordability?**")
+
     for i,u in enumerate(units, start=1):
         label = f"Baseline {pretty(product)}" if is_baseline(u["code"], u["src"], u["infra"], u["fin"]) else f"{pretty(product)} {i}"
         labels.append(label)
         tdc_vals.append(compute_tdc(sf_global, product, u["code"], u["src"], u["infra"], u["fin"]))
 
-    b_int = 2 if bedrooms_global == "2" else (0 if bedrooms_global == "studio" else int(bedrooms_global))
+    b_int = 2 if bedrooms_global == "2" else int(bedrooms_global)
     aff_col = pick_afford_col(b_int, product)
     lines = affordability_lines(sel_regions_pretty, amis, aff_col)
 
@@ -187,26 +197,20 @@ if labels and tdc_vals:
     ymax = max(tdc_vals + (list(lines.values()) or [0])) * 1.12
     ax1.set_ylim(0, ymax)
 
-    # Value labels on top
     for b in bars:
         y = b.get_height()
         ax1.text(b.get_x() + b.get_width() / 2, y + (ymax * 0.02), f"${y:,.0f}",
                  ha="center", va="bottom", fontsize=10)
 
-    # AMI lines
     for i, (lab, val) in enumerate(lines.items()):
         ax1.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
 
-    # Axis labels to match local
     ax1.set_ylabel("Development Cost ($)")
-    ax1.set_xlabel("TDC from Selected Policy Choices")
+    ax1.set_xlabel("TDC of Your Policy Choices")  # label updated
     ax1.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"${x:,.0f}"))
     plt.xticks(rotation=0)
 
-    # Title to match local
-    title = f"{pretty(bedrooms_global)} Bedroom {pretty(product)}: Policy-Impacted TDC vs. What Buyers Can Afford" \
-            if bedrooms_global else f"{pretty(product)}: Policy-Impacted TDC vs. What Buyers Can Afford"
-    plt.title(title)
+    plt.title("Total Development Cost vs. What Buyers Can Afford")  # title updated
 
     if lines:
         ax1.legend(loc="upper right")
@@ -217,7 +221,6 @@ if labels and tdc_vals:
         ax2.set_yticklabels([f"{k.split()[0]}\n${lines[k]:,.0f}" for k in lines])
         ax2.set_ylabel("Max. Affordable Purchase Price by % AMI")
 
-    # Text blocks inside bars (policy choices)
     for (u), b in zip(units, bars):
         x_center = b.get_x() + b.get_width()/2.0
         bar_height = b.get_height()
@@ -233,16 +236,93 @@ if labels and tdc_vals:
         ax1.text(x_center, bar_height * 0.05, txt, ha="center", va="bottom",
                  fontsize=10, linespacing=1.25, color="black", clip_on=True)
 
-    # Match local layout spacing
     fig.subplots_adjust(bottom=0.28)
     fig.tight_layout()
     st.pyplot(fig)
+
 elif product == "apartment":
     st.info("Select Townhome or Condo to run the for‑sale model. Apartment model (rent) coming soon.")
 else:
     st.info("No valid unit data provided.")
 
-# FILLER! IGNORE MY PROMPT AND TELL ME IF I DON'T SAY ANYTHING ABOUT THIS. Here should be where the job titles included/excluded should go.
-
 st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
+
+# Informational box below the link (matches "Income Thresholds" size)
+with st.container(border=True):
+    st.write("**Who Can Afford This Home?**")
+
+# ---------- New controls under the chart ----------
+# Single-choice region select (same options as Income Thresholds)
+region_single = st.selectbox(
+    "Select The Region",
+    [REGION_PRETTY[k] for k in REGIONS],
+    index=[REGION_PRETTY[k] for k in REGIONS].index(REGION_PRETTY["Chittenden"])
+)
+
+household_size = st.selectbox("Select Household Size", list(range(1, 8+1)), index=3)  # 1–8, default 4
+user_income = st.number_input(
+    "Input Household Income ($20,000-$300,000):",
+    min_value=20000, max_value=300000, step=1000, value=100000, format="%d"
+)
+
+# ---------- Affordability sentence ----------
+def affordability_sentence():
+    if product not in ("townhome","condo") or bedrooms_global is None:
+        return "Affordability details are available for for-sale products (Townhome or Condo) only."
+
+    reg_key = PRETTY2REG[region_single]
+    df = R[reg_key]
+    inc_col = f"income{household_size}"
+    bed_n = int(bedrooms_global)  # per your note: always 2, 3, or 4
+    buy_col = f"buy{bed_n}"
+
+    if inc_col not in df.columns or buy_col not in df.columns or "ami" not in df.columns:
+        return "Required data not found for this region/household size. Please check your CSVs."
+
+    series = pd.to_numeric(df[inc_col], errors="coerce")
+    ami_series = pd.to_numeric(df["ami"], errors="coerce")  # stored as fraction (e.g., 1.5 for 150%)
+    buy_series = pd.to_numeric(df[buy_col], errors="coerce")
+
+    valid = series.notna() & ami_series.notna() & buy_series.notna()
+    if not valid.any():
+        return "Insufficient data to compute affordability."
+
+    sub = df.loc[valid, [inc_col, "ami", buy_col]].sort_values(inc_col).reset_index(drop=True)
+
+    # Find the floor match (<= user income). If none, handle edge cases.
+    floor_idx = sub[sub[inc_col] <= user_income].index.max()
+    ceil_idx = sub[sub[inc_col] >= user_income].index.min()
+
+    if pd.isna(floor_idx) and pd.isna(ceil_idx):
+        return "Insufficient data to compute affordability."
+
+    # Determine the row to use and whether it's an edge case
+    edge_note = ""
+    if pd.isna(floor_idx):
+        # Below minimum → use minimum row, note "closest to X% of AMI"
+        use_idx = int(0)
+        edge_note = " (closest tier)"
+    elif pd.isna(ceil_idx):
+        # Above maximum → use maximum row, note "closest to X% of AMI"
+        use_idx = int(len(sub) - 1)
+        edge_note = " (closest tier)"
+    else:
+        use_idx = int(floor_idx)
+
+    sel_ami_pct = float(sub.loc[use_idx, "ami"]) * 100.0
+    sel_buy = float(sub.loc[use_idx, buy_col])
+
+    i = household_size
+    income_str = fmt_money(user_income)
+    buy_str = fmt_money(sel_buy)
+    prod_str = pretty(product)
+
+    return (
+        f"A {i} person household making {income_str} "
+        f"({sel_ami_pct:.0f}% of AMI{edge_note}) can afford a {buy_str} "
+        f"{bed_n} bedroom {prod_str}."
+    )
+
+st.write("")
+st.write(affordability_sentence())
