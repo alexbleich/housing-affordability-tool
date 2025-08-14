@@ -1,5 +1,6 @@
 # housing-affordability-tool.py — Streamlit version (updated)
 
+import html
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -263,25 +264,24 @@ elif product == "apartment":
 else:
     st.info("No valid unit data provided.")
 
-st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 
 # --- Informational header below the link (no box) ---
 st.subheader("Who Can Afford This Home?")
 
-# Controls + output in a matching container
+# --- Controls + output in a matching container ---
 with st.container(border=True):
-    # Single-choice region select (same options as Income Thresholds)
     region_single = st.selectbox(
         "Select The Region",
         [REGION_PRETTY[k] for k in REGIONS],
         index=[REGION_PRETTY[k] for k in REGIONS].index(REGION_PRETTY["Chittenden"])
     )
 
-    household_size = st.selectbox("Select Household Size", list(range(1, 9)), index=3)  # 1–8, default 4
+    household_size = st.selectbox("Select Household Size", list(range(1, 9)), index=3)
 
+    # Use a simple, plain label to avoid odd digit-grouping spacing in some themes
     user_income = st.number_input(
-        "Input Household Income ($20,000–$300,000):",
+        "Input Household Income ($20,000 - $300,000):",
         min_value=20000, max_value=300000, step=1000, value=100000, format="%d"
     )
 
@@ -291,8 +291,7 @@ with st.container(border=True):
         except Exception:
             return "—"
 
-    def affordability_sentence():
-        # Only for for-sale products
+    def affordability_sentence() -> str:
         if product not in ("townhome", "condo") or bedrooms_global is None:
             return "Affordability details are available for for-sale products (Townhome or Condo) only."
 
@@ -300,63 +299,53 @@ with st.container(border=True):
         df = R[reg_key]
 
         inc_col = f"income{household_size}"
-        bed_n = int(bedrooms_global)            # per your note: always 2, 3, or 4
+        bed_n = int(bedrooms_global)       # always 2/3/4 per your note
         buy_col = f"buy{bed_n}"
 
-        # Basic validation
         if not {"ami", inc_col, buy_col}.issubset(df.columns):
             return "Required data not found for this region/household size. Please check your CSVs."
 
-        # Clean numerics
         inc_series = pd.to_numeric(df[inc_col], errors="coerce")
-        ami_series = pd.to_numeric(df["ami"], errors="coerce")     # fraction, e.g., 1.5 = 150%
+        ami_series = pd.to_numeric(df["ami"], errors="coerce")  # fraction, e.g., 1.50 = 150%
         buy_series = pd.to_numeric(df[buy_col], errors="coerce")
 
         valid = inc_series.notna() & ami_series.notna() & buy_series.notna()
         if not valid.any():
             return "Insufficient data to compute affordability."
 
-        sub = pd.DataFrame({
-            "income": inc_series[valid],
-            "ami_frac": ami_series[valid],
-            "buy": buy_series[valid],
-        }).sort_values("income").reset_index(drop=True)
+        sub = pd.DataFrame(
+            {"income": inc_series[valid], "ami_frac": ami_series[valid], "buy": buy_series[valid]}
+        ).sort_values("income").reset_index(drop=True)
 
-        # Floor/ceil indices for the income
         floor_idx = sub[sub["income"] <= user_income].index.max()
         ceil_idx  = sub[sub["income"] >= user_income].index.min()
 
-        # Choose row and edge-note
+        edge_note = ""
         if pd.isna(floor_idx) and pd.isna(ceil_idx):
             return "Insufficient data to compute affordability."
-
-        edge_note = ""
         if pd.isna(floor_idx):
-            use_idx = 0                       # below minimum → use min row
-            sel_ami_pct = float(sub.loc[use_idx, "ami_frac"]) * 100.0
-            edge_note = f" (closest to {sel_ami_pct:.0f}% of AMI)"
+            use_idx = 0
+            edge_note = " (closest tier)"
         elif pd.isna(ceil_idx):
-            use_idx = len(sub) - 1            # above maximum → use max row
-            sel_ami_pct = float(sub.loc[use_idx, "ami_frac"]) * 100.0
-            edge_note = f" (closest to {sel_ami_pct:.0f}% of AMI)"
+            use_idx = len(sub) - 1
+            edge_note = " (closest tier)"
         else:
             use_idx = int(floor_idx)
-            sel_ami_pct = float(sub.loc[use_idx, "ami_frac"]) * 100.0
 
+        sel_ami_pct = float(sub.loc[use_idx, "ami_frac"]) * 100.0
         sel_buy = float(sub.loc[use_idx, "buy"])
 
-        # Build sentence (clean spacing/formatting)
-        i = household_size
         income_str = fmt_money(user_income)
         buy_str = fmt_money(sel_buy)
         prod_str = pretty(product)
 
+        # Build a single, clearly spaced sentence
+        ami_text = f"{sel_ami_pct:.0f}% of AMI{edge_note}"
         return (
-            f"A {i} person household making {income_str} "
-            f"({sel_ami_pct:.0f}% of AMI{edge_note}) can afford a {buy_str} "
-            f"{bed_n} bedroom {prod_str}."
+            f"A {household_size} person household making {income_str} "
+            f"({ami_text}) can afford a {buy_str} {bed_n} bedroom {prod_str}."
         )
 
-    # Show sentence inside the box
-    st.write(affordability_sentence())
-
+    # IMPORTANT: render as plain text to avoid Markdown quirks with %, commas, etc.
+    st.text(affordability_sentence())
+    
