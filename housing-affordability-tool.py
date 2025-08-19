@@ -262,7 +262,7 @@ else:
 st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 
-# ===== Who Can Afford This Home? (header outside; controls + sentence inside) =====
+# ===== Who Can Afford This Home? =====
 st.subheader("Who Can Afford This Home?")
 with st.container(border=True):
     region_single = st.selectbox(
@@ -272,11 +272,10 @@ with st.container(border=True):
     )
     household_size = st.selectbox("Select Household Size", list(range(1, 9)), index=3)
 
-    # Render label as text and collapse widget label to avoid comma/spacing glitches
-    st.write("Input Household Income ($20,000–$300,000):")
+    # Render a clean label manually (no commas/glitches)
+    st.markdown("**Input Household Income ($20000 - $300000):**")
     user_income = st.number_input(
-        label="",
-        label_visibility="collapsed",
+        label="", label_visibility="collapsed",
         min_value=20000, max_value=300000, step=1000, value=100000, format="%d"
     )
 
@@ -288,24 +287,21 @@ with st.container(border=True):
         df = R[reg_key]
 
         inc_col = f"income{household_size}"
-        bed_n = int(bedrooms_global)  # 2,3,4
+        bed_n = int(bedrooms_global)
         buy_col = f"buy{bed_n}"
 
         if not {"ami", inc_col, buy_col}.issubset(df.columns):
-            return "Required data not found for this region/household size. Please check your CSVs."
+            return "Required data not found for this region/household size."
 
         inc_series = pd.to_numeric(df[inc_col], errors="coerce")
         ami_series = pd.to_numeric(df["ami"], errors="coerce")   # fraction
         buy_series = pd.to_numeric(df[buy_col], errors="coerce")
 
-        valid = inc_series.notna() & ami_series.notna() & buy_series.notna()
-        if not valid.any():
+        sub = pd.DataFrame({"income": inc_series, "ami_frac": ami_series, "buy": buy_series}).dropna()
+        if sub.empty:
             return "Insufficient data to compute affordability."
 
-        sub = pd.DataFrame(
-            {"income": inc_series[valid], "ami_frac": ami_series[valid], "buy": buy_series[valid]}
-        ).sort_values("income").reset_index(drop=True)
-
+        sub = sub.sort_values("income").reset_index(drop=True)
         floor_idx = sub[sub["income"] <= user_income].index.max()
         ceil_idx  = sub[sub["income"] >= user_income].index.min()
 
@@ -314,25 +310,19 @@ with st.container(border=True):
             return "Insufficient data to compute affordability."
         if pd.isna(floor_idx):
             use_idx = 0
-            sel_ami_pct = float(sub.loc[use_idx, "ami_frac"]) * 100.0
-            edge_note = f" (closest to {sel_ami_pct:.0f}% of AMI)"
+            edge_note = f" (closest to {sub.loc[use_idx, 'ami_frac']*100:.0f}% of AMI)"
         elif pd.isna(ceil_idx):
             use_idx = len(sub) - 1
-            sel_ami_pct = float(sub.loc[use_idx, "ami_frac"]) * 100.0
-            edge_note = f" (closest to {sel_ami_pct:.0f}% of AMI)"
+            edge_note = f" (closest to {sub.loc[use_idx, 'ami_frac']*100:.0f}% of AMI)"
         else:
             use_idx = int(floor_idx)
-            sel_ami_pct = float(sub.loc[use_idx, "ami_frac"]) * 100.0
 
+        sel_ami_pct = float(sub.loc[use_idx, "ami_frac"]) * 100.0
         sel_buy = float(sub.loc[use_idx, "buy"])
 
-        income_str = fmt_money(user_income)
-        buy_str = fmt_money(sel_buy)
-        prod_str = pretty(product)
+        return (f"A {household_size} person household making {fmt_money(user_income)} "
+                f"({sel_ami_pct:.0f}% of AMI{edge_note}) can afford a "
+                f"{fmt_money(sel_buy)} {bed_n} bedroom {pretty(product)}.")
 
-        return (f"A {household_size} person household making {income_str} "
-                f"({sel_ami_pct:.0f}% of AMI{edge_note}) can afford a {buy_str} "
-                f"{bed_n} bedroom {prod_str}.")
-
-    # Render as plain text to avoid Markdown spacing quirks
     st.text(affordability_sentence())
+
