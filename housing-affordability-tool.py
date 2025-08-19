@@ -284,9 +284,9 @@ user_income = st.number_input(
     format="%d"
 )
 
-    def affordability_sentence():
-        if product not in ("townhome", "condo") or bedrooms_global is None:
-            return "Affordability details are available for for-sale products (Townhome or Condo) only."
+def affordability_sentence():
+    if product not in ("townhome", "condo") or bedrooms_global is None:
+        return "Affordability details are available for for-sale products (Townhome or Condo) only."
 
         reg_key = PRETTY2REG[region_single]
         df = R[reg_key]
