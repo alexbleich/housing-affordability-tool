@@ -294,7 +294,7 @@ with st.container(border=True):
                 unsafe_allow_html=True)
     st.write("")
 
-# ===== Chart 2: Your Affordability vs TDC (with income label fixed) =====
+# ===== Chart 2: Your Affordability vs TDC (right‑axis income label + clearer legend + success/fail) =====
 st.write("")  # breathing room above the graph
 if labels and tdc_vals and product in ("townhome","condo"):
     bed_n = int(bedrooms_global)
@@ -312,21 +312,21 @@ if labels and tdc_vals and product in ("townhome","condo"):
         ax.text(b.get_x() + b.get_width()/2, y + (ymax2*0.025), f"${y:,.0f}",
                 ha="center", va="bottom", fontsize=10)
 
-    # Green line
     if your_afford_price is not None and your_ami_pct is not None:
+        # green affordability line
         ax.axhline(
             y=your_afford_price,
             linestyle="-", linewidth=2.8, color="#2E7D32",
-            label="Max affordable price (your income)"
+            label="Affordable price at your income"
         )
-        # === FIXED inline label for income ===
+        # income label ON the right axis, just the number, touching the line
         ax.annotate(
-            f"Income selected: {fmt_money(user_income)}",
-            xy=(0.5, your_afford_price), xycoords=("axes fraction", "data"),
-            xytext=(0, -12), textcoords="offset points",
-            ha="center", va="top",
+            f"{fmt_money(user_income)}",
+            xy=(1.0, your_afford_price), xycoords=("axes fraction", "data"),
+            xytext=(-6, 0), textcoords="offset points",  # nudge left so it kisses the axis spine
+            ha="right", va="center",
             fontsize=10, color="#2E7D32",
-            bbox=dict(facecolor="white", alpha=0.75, edgecolor="none", pad=2)
+            bbox=dict(facecolor="white", alpha=0.8, edgecolor="none", pad=2)
         )
 
     ax.set_ylabel("Development Cost ($)")
@@ -335,13 +335,37 @@ if labels and tdc_vals and product in ("townhome","condo"):
     plt.xticks(rotation=0)
     plt.title("Your Affordability vs. Policy-Impacted TDC")
 
-    # Right axis formatting
+    # Right axis: no ticks; axis title set and spaced away from plot & income number
     ax_r = ax.twinx()
     ax_r.set_ylim(ax.get_ylim())
     ax_r.set_yticks([])
-    ax_r.set_ylabel("Income Required to Purchase", labelpad=60)
+    ax_r.set_ylabel("Income Required to Purchase", labelpad=70)
 
+    # give room so the right-axis title sits beyond the income label
     fig2.subplots_adjust(top=0.90, bottom=0.20, right=0.84)
+
     ax.legend(loc="upper right")
     fig2.tight_layout()
     st.pyplot(fig2)
+
+    # --- Success / Fail message under the chart ---
+    if your_afford_price is not None:
+        affordable_idxs = [i for i, v in enumerate(tdc_vals) if v <= your_afford_price]
+        if affordable_idxs:
+            best_i = min(affordable_idxs, key=lambda i: tdc_vals[i])
+            st.markdown(
+                f"""<div style="padding:0.5rem 0.75rem; border-radius:8px; background:#E6F4EA; color:#1E7D34; border:1px solid #C8E6C9;">
+                ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                you can afford <b>{len(affordable_idxs)} of {len(tdc_vals)}</b> option(s). Lowest‑cost affordable: <b>{labels[best_i]}</b>.
+                </div>""",
+                unsafe_allow_html=True
+            )
+        else:
+            gap = min(tdc_vals) - your_afford_price
+            st.markdown(
+                f"""<div style="padding:0.5rem 0.75rem; border-radius:8px; background:#FDECEA; color:#B71C1C; border:1px solid #F5C6CB;">
+                ❌ <b>Not yet:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                none of the options are affordable. Shortfall vs. lowest‑cost option: <b>{fmt_money(gap)}</b>.
+                </div>""",
+                unsafe_allow_html=True
+            )
