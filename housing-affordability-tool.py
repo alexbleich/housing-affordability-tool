@@ -34,7 +34,7 @@ def load_regions(files: dict) -> dict:
         d = pd.read_csv(p)
         d.columns = d.columns.str.strip().str.lower()
         if "ami" in d:
-            d["ami"] = pd.to_numeric(d["ami"], errors="coerce")  # fraction, e.g., 1.50 = 150%
+            d["ami"] = pd.to_numeric(d["ami"], errors="coerce")  # fraction (e.g., 1.50 = 150%)
         out[name] = d
     return out
 
@@ -127,7 +127,7 @@ def fmt_money(x):
     except Exception:
         return "—"
 
-# ===== Page Header =====
+# ===== Header =====
 st.title("🏘️ Housing Affordability Visualizer")
 st.write("Pick your policies below to see how it affects affordability.")
 st.markdown("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)")
@@ -155,7 +155,7 @@ else:
     st.info("Apartment modeling (rent-based) coming soon. For now, choose Townhome or Condo to compare for-sale products.")
 
 # ===== Per-Unit Policy Blocks =====
-num_units = st.slider("How many units would you like to compare?", 1, 5, 2, disabled=(product == "apartment"))
+num_units = st.selectbox("How many units would you like to compare?", [1, 2, 3, 4, 5], index=1, disabled=(product == "apartment"))
 units = []
 disabled_block = (product == "apartment")
 for i in range(num_units):
@@ -195,7 +195,7 @@ with st.container(border=True):
         default=[REGION_PRETTY["Chittenden"]]
     )
     valid_amis = [30] + list(range(50, 155, 5))
-    n_amis = st.slider("How many Area Median Income (AMI) levels?", 1, 3, 1)
+    n_amis = st.selectbox("How many Area Median Income (AMI) levels?", [1, 2, 3], index=0)
     amis = []
     default_cycle = [150, 120, 100]
     for i in range(n_amis):
@@ -209,7 +209,7 @@ with st.container(border=True):
             )
         )
 
-# ===== Chart Section =====
+# ===== Chart =====
 labels, tdc_vals, lines = [], [], {}
 if product in ("townhome", "condo") and units:
     st.subheader("How did your choices affect affordability?")
@@ -218,7 +218,7 @@ if product in ("townhome", "condo") and units:
         labels.append(label)
         tdc_vals.append(compute_tdc(sf_global, product, u["code"], u["src"], u["infra"], u["fin"]))
 
-    b_int = int(bedrooms_global)  # always 2,3,4 per your note
+    b_int = int(bedrooms_global)  # 2,3,4
     aff_col = pick_afford_col(b_int, product)
     lines = affordability_lines(sel_regions_pretty, amis, aff_col)
 
@@ -272,21 +272,16 @@ with st.container(border=True):
     )
     household_size = st.selectbox("Select Household Size", list(range(1, 9)), index=3)
 
-# Label line - render as plain text so font/size stays consistent
-st.write("Input Household Income ($20,000 - $300,000):")
+    # Render label as plain text (no commas; consistent font/size), collapse widget label
+    st.write("Input Household Income ($20000 - $300000):")
+    user_income = st.number_input(
+        label="", label_visibility="collapsed",
+        min_value=20000, max_value=300000, step=1000, value=100000, format="%d"
+    )
 
-# Collapsed number input (so no duplicate label shows)
-user_income = st.number_input(
-    label=" ",                # single space
-    label_visibility="collapsed",
-    min_value=20000, max_value=300000,
-    step=1000, value=100000,
-    format="%d"
-)
-
-def affordability_sentence():
-    if product not in ("townhome", "condo") or bedrooms_global is None:
-        return "Affordability details are available for for-sale products (Townhome or Condo) only."
+    def affordability_sentence():
+        if product not in ("townhome", "condo") or bedrooms_global is None:
+            return "Affordability details are available for for-sale products (Townhome or Condo) only."
 
         reg_key = PRETTY2REG[region_single]
         df = R[reg_key]
@@ -310,17 +305,18 @@ def affordability_sentence():
         floor_idx = sub[sub["income"] <= user_income].index.max()
         ceil_idx  = sub[sub["income"] >= user_income].index.min()
 
-        edge_note = ""
+        # Choose row and set a clear edge-note when out of range
         if pd.isna(floor_idx) and pd.isna(ceil_idx):
             return "Insufficient data to compute affordability."
-        if pd.isna(floor_idx):
+        if pd.isna(floor_idx):            # below minimum
             use_idx = 0
             edge_note = f" (closest to {sub.loc[use_idx, 'ami_frac']*100:.0f}% of AMI)"
-        elif pd.isna(ceil_idx):
+        elif pd.isna(ceil_idx):           # above maximum
             use_idx = len(sub) - 1
             edge_note = f" (closest to {sub.loc[use_idx, 'ami_frac']*100:.0f}% of AMI)"
         else:
             use_idx = int(floor_idx)
+            edge_note = ""
 
         sel_ami_pct = float(sub.loc[use_idx, "ami_frac"]) * 100.0
         sel_buy = float(sub.loc[use_idx, "buy"])
@@ -330,4 +326,3 @@ def affordability_sentence():
                 f"{fmt_money(sel_buy)} {bed_n} bedroom {pretty(product)}.")
 
     st.text(affordability_sentence())
-
