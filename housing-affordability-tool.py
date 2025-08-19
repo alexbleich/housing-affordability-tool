@@ -323,7 +323,7 @@ if labels and tdc_vals and product in ("townhome","condo"):
     ax.annotate(
         f"{fmt_money(user_income)}",
         xy=(1.0, your_afford_price), xycoords=("axes fraction", "data"),
-        xytext=(30, 0), textcoords="offset points",   # push outside by ~30px
+        xytext=(10, 0), textcoords="offset points",   # push outside by ~30px
         ha="left", va="center",
         fontsize=10, color="#2E7D32",
         bbox=dict(facecolor="white", alpha=0.0, edgecolor="none", pad=0)  # invisible box
