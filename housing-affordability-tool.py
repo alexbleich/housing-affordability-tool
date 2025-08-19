@@ -290,25 +290,31 @@ with st.container(border=True):
         return (f"A {household_size} person household making {fmt_money(user_income)} "
                 f"({ami_phrase}) can afford a {fmt_money(sel_buy)} "
                 f"{bed_n} bedroom {pretty(product)}.")
+
     st.markdown(f"""<div style="color:#87CEEB; font-weight:500; margin-top:0.5rem;">{affordability_sentence()}</div>""",
                 unsafe_allow_html=True)
+    st.write("")  # extra space inside the box, right under the blue sentence
 
-# ===== Chart 2: Same Bars + Your Dynamic Affordability Line =====
+# ===== Chart 2: Your Affordability vs TDC (with more top space & secondary axis label) =====
+st.write("")  # a little room above the graph
 if labels and tdc_vals and product in ("townhome","condo"):
+    bed_n = int(bedrooms_global)
     your_ami_pct = household_ami_percent(reg_key, household_size, user_income)
-    your_afford_price = affordability_at_percent(reg_key, int(bedrooms_global), your_ami_pct) if your_ami_pct is not None else None
+    your_afford_price = affordability_at_percent(reg_key, bed_n, your_ami_pct) if your_ami_pct is not None else None
 
-    fig2, ax = plt.subplots(figsize=(12, 5.5))
+    fig2, ax = plt.subplots(figsize=(12, 6))
     bars2 = ax.bar(labels, tdc_vals, color="skyblue", edgecolor="black")
-    ymax2 = max(tdc_vals + ([your_afford_price] if your_afford_price else [0])) * 1.12
+
+    # generous headroom so the legend & line don't feel cramped
+    ymax2 = max(tdc_vals + ([your_afford_price] if your_afford_price else [0])) * 1.25
     ax.set_ylim(0, ymax2)
 
     for b in bars2:
         y = b.get_height()
-        ax.text(b.get_x() + b.get_width()/2, y + (ymax2*0.02), f"${y:,.0f}", ha="center", va="bottom", fontsize=10)
+        ax.text(b.get_x() + b.get_width()/2, y + (ymax2*0.025), f"${y:,.0f}", ha="center", va="bottom", fontsize=10)
 
     if your_afford_price is not None and your_ami_pct is not None:
-        ax.axhline(y=your_afford_price, linestyle="-", linewidth=2.5, color="#2E7D32",
+        ax.axhline(y=your_afford_price, linestyle="-", linewidth=2.8, color="#2E7D32",
                    label=f"Your affordability — {your_ami_pct:.0f}% AMI: ${your_afford_price:,.0f}")
 
     ax.set_ylabel("Development Cost ($)")
@@ -316,7 +322,36 @@ if labels and tdc_vals and product in ("townhome","condo"):
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"${x:,.0f}"))
     plt.xticks(rotation=0)
     plt.title("Your Affordability vs. Policy-Impacted TDC")
+
+    # secondary y-axis clarifying what the green line represents
+    ax_r = ax.twinx()
+    ax_r.set_ylim(ax.get_ylim())
+    ax_r.set_ylabel("Estimated Max Purchase Price at Your AMI (Region × Household Size × Income)")
+
     if your_afford_price is not None:
         ax.legend(loc="upper right")
+
+    # extra top padding so legend/title/line have breathing room
+    fig2.subplots_adjust(top=0.90, bottom=0.20)
     fig2.tight_layout()
     st.pyplot(fig2)
+
+    # success/fail message under the chart
+    if your_afford_price is not None:
+        affordable_idxs = [i for i, v in enumerate(tdc_vals) if v <= your_afford_price]
+        if affordable_idxs:
+            best_i = min(affordable_idxs, key=lambda i: tdc_vals[i])
+            st.markdown(
+                f"""<div style="padding:0.5rem 0.75rem; border-radius:8px; background:#E6F4EA; color:#1E7D34; border:1px solid #C8E6C9;">
+                ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>), you can afford <b>{len(affordable_idxs)} of {len(tdc_vals)}</b> option(s). Lowest‑cost affordable: <b>{labels[best_i]}</b>.
+                </div>""",
+                unsafe_allow_html=True
+            )
+        else:
+            gap = min(tdc_vals) - your_afford_price
+            st.markdown(
+                f"""<div style="padding:0.5rem 0.75rem; border-radius:8px; background:#FDECEA; color:#B71C1C; border:1px solid #F5C6CB;">
+                ❌ <b>Not yet:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>), none of the options are affordable. Shortfall vs. lowest‑cost option: <b>{fmt_money(gap)}</b>.
+                </div>""",
+                unsafe_allow_html=True
+            )
