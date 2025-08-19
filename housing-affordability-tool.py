@@ -319,16 +319,15 @@ if labels and tdc_vals and product in ("townhome","condo"):
             linestyle="-", linewidth=2.8, color="#2E7D32",
             label="Affordable price at your income"
         )
-        # income label ON the right axis, just the number, touching the line
-        ax.annotate(
-            f"{fmt_money(user_income)}",
-            xy=(1.0, your_afford_price), xycoords=("axes fraction", "data"),
-            xytext=(-6, 0), textcoords="offset points",  # nudge left so it kisses the axis spine
-            ha="right", va="center",
-            fontsize=10, color="#2E7D32",
-            bbox=dict(facecolor="white", alpha=0.8, edgecolor="none", pad=2)
-        )
-
+    # income label OUTSIDE the plot box
+    ax.annotate(
+        f"{fmt_money(user_income)}",
+        xy=(1.0, your_afford_price), xycoords=("axes fraction", "data"),
+        xytext=(30, 0), textcoords="offset points",   # push outside by ~30px
+        ha="left", va="center",
+        fontsize=10, color="#2E7D32",
+        bbox=dict(facecolor="white", alpha=0.0, edgecolor="none", pad=0)  # invisible box
+    )
     ax.set_ylabel("Development Cost ($)")
     ax.set_xlabel("TDC of Your Policy Choices")
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"${x:,.0f}"))
