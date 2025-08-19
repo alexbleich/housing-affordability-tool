@@ -272,12 +272,17 @@ with st.container(border=True):
     )
     household_size = st.selectbox("Select Household Size", list(range(1, 9)), index=3)
 
-    # Render a clean label manually (no commas/glitches)
-    st.markdown("**Input Household Income ($20000 - $300000):**")
-    user_income = st.number_input(
-        label="", label_visibility="collapsed",
-        min_value=20000, max_value=300000, step=1000, value=100000, format="%d"
-    )
+# Label line - render as plain text so font/size stays consistent
+st.write("Input Household Income ($20,000 - $300,000):")
+
+# Collapsed number input (so no duplicate label shows)
+user_income = st.number_input(
+    label=" ",                # single space
+    label_visibility="collapsed",
+    min_value=20000, max_value=300000,
+    step=1000, value=100000,
+    format="%d"
+)
 
     def affordability_sentence():
         if product not in ("townhome", "condo") or bedrooms_global is None:
