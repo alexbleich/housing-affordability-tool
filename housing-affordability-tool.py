@@ -321,7 +321,7 @@ if labels and tdc_vals and product in ("townhome","condo"):
         )
     # income label OUTSIDE the plot box
     ax.annotate(
-        f"{fmt_money(user_income)}",
+        f"Your income:\n   {fmt_money(user_income)}",
         xy=(1.0, your_afford_price), xycoords=("axes fraction", "data"),
         xytext=(10, 0), textcoords="offset points",   # push outside by ~30px
         ha="left", va="center",
