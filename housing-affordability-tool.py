@@ -22,7 +22,7 @@ PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 @st.cache_data
 def load_assumptions(p: Path) -> pd.DataFrame:
     df = pd.read_csv(p)
-    for c in ("category", "parent_option", "option", "value_type", "unit"):
+    for c in ("category","parent_option","option","value_type","unit"):
         df[c] = df[c].astype(str).str.strip().str.lower()
     df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0.0)
     return df
@@ -34,7 +34,7 @@ def load_regions(files: dict) -> dict:
         d = pd.read_csv(p)
         d.columns = d.columns.str.strip().str.lower()
         if "ami" in d:
-            d["ami"] = pd.to_numeric(d["ami"], errors="coerce")
+            d["ami"] = pd.to_numeric(d["ami"], errors="coerce")  # fraction (e.g., 1.50 = 150%)
         out[name] = d
     return out
 
@@ -116,18 +116,8 @@ def fmt_money(x):
     try: return f"${x:,.0f}"
     except Exception: return "—"
 
-# ===== Session Defaults =====
-if "ui_region_pretty" not in st.session_state:
-    st.session_state["ui_region_pretty"] = "Chittenden"
-if "ui_household_size" not in st.session_state:
-    st.session_state["ui_household_size"] = 4
-if "ui_user_income" not in st.session_state:
-    st.session_state["ui_user_income"] = 100000
-
-# ===== Interpolation Helpers =====
 def household_ami_percent(region_key: str, hh_size: int, income_val: float):
-    df = R[region_key]
-    inc_col = f"income{hh_size}"
+    df = R[region_key]; inc_col = f"income{hh_size}"
     if not {"ami", inc_col}.issubset(df.columns): return None
     sub = df[[inc_col, "ami"]].dropna().sort_values(inc_col)
     if sub.empty: return None
@@ -138,8 +128,7 @@ def household_ami_percent(region_key: str, hh_size: int, income_val: float):
     return float(np.interp(xv, x, y))
 
 def affordability_at_percent(region_key: str, bed_n: int, ami_percent: float):
-    df = R[region_key]
-    buy_col = f"buy{bed_n}"
+    df = R[region_key]; buy_col = f"buy{bed_n}"
     if not {"ami", buy_col}.issubset(df.columns): return None
     sub = df[["ami", buy_col]].dropna().sort_values("ami")
     if sub.empty: return None
@@ -203,7 +192,7 @@ with st.container(border=True):
         default_val = default_cycle[i] if i < len(default_cycle) and default_cycle[i] in valid_amis else 150
         amis.append(st.selectbox(f"AMI value #{i+1}", valid_amis, index=valid_amis.index(default_val), key=f"ami_{i}"))
 
-# ===== Chart + Dynamic Household Line + Outcome =====
+# ===== Chart 1: Simple Bars + Selected AMI Lines =====
 labels, tdc_vals, lines = [], [], {}
 if product in ("townhome","condo") and units:
     st.subheader("How did your choices affect affordability?")
@@ -215,53 +204,30 @@ if product in ("townhome","condo") and units:
     aff_col = pick_afford_col(b_int, product)
     lines = affordability_lines(sel_regions_pretty, amis, aff_col)
 
-your_region_key = PRETTY2REG.get(st.session_state["ui_region_pretty"], "Chittenden")
-your_hh_size = int(st.session_state["ui_household_size"])
-your_income = int(st.session_state["ui_user_income"])
-your_ami_pct = household_ami_percent(your_region_key, your_hh_size, your_income) if bedrooms_global else None
-your_afford_price = affordability_at_percent(your_region_key, int(bedrooms_global) if bedrooms_global else 2, your_ami_pct) if your_ami_pct is not None else None
-
 if labels and tdc_vals:
     fig, ax1 = plt.subplots(figsize=(12, 6))
     bars = ax1.bar(labels, tdc_vals, color="skyblue", edgecolor="black")
-    for i,(lab,val) in enumerate(lines.items()):
-        ax1.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
-    if your_afford_price is not None and your_ami_pct is not None:
-        ax1.axhline(y=your_afford_price, linestyle="-", linewidth=2.5, color="#2E7D32",
-                    label=f"Your affordability — {your_ami_pct:.0f}% AMI: ${your_afford_price:,.0f}")
-    ymax = max(tdc_vals + ([your_afford_price] if your_afford_price else []) + (list(lines.values()) or [0])) * 1.12
+    ymax = max(tdc_vals + (list(lines.values()) or [0])) * 1.12
     ax1.set_ylim(0, ymax)
     for b in bars:
         y = b.get_height()
         ax1.text(b.get_x() + b.get_width()/2, y + (ymax*0.02), f"${y:,.0f}", ha="center", va="bottom", fontsize=10)
+    for i,(lab,val) in enumerate(lines.items()):
+        ax1.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
     ax1.set_ylabel("Development Cost ($)")
     ax1.set_xlabel("TDC of Your Policy Choices")
     ax1.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"${x:,.0f}"))
     plt.xticks(rotation=0)
     plt.title("Total Development Cost vs. What Buyers Can Afford")
-    if lines or your_afford_price is not None:
+    if lines:
         ax1.legend(loc="upper right")
-    fig.subplots_adjust(bottom=0.28)
-    fig.tight_layout()
+        ax2 = ax1.twinx(); ax2.set_ylim(ax1.get_ylim())
+        vals = list(lines.values())
+        ax2.set_yticks(vals)
+        ax2.set_yticklabels([f"{k.split()[0]}\n${lines[k]:,.0f}" for k in lines])
+        ax2.set_ylabel("Max. Affordable Purchase Price by % AMI")
+    fig.subplots_adjust(bottom=0.28); fig.tight_layout()
     st.pyplot(fig)
-    if your_afford_price is not None:
-        affordable_idxs = [i for i, v in enumerate(tdc_vals) if v <= your_afford_price]
-        if affordable_idxs:
-            best_i = min(affordable_idxs, key=lambda i: tdc_vals[i])
-            st.markdown(
-                f"""<div style="padding:0.5rem 0.75rem; border-radius:8px; background:#E6F4EA; color:#1E7D34; border:1px solid #C8E6C9;">
-                ✅ <b>Success:</b> At your income (<b>${your_income:,.0f}</b>) and household size (<b>{your_hh_size}</b>), you can afford <b>{len(affordable_idxs)} of {len(tdc_vals)}</b> option(s). Lowest‑cost affordable: <b>{labels[best_i]}</b>.
-                </div>""",
-                unsafe_allow_html=True
-            )
-        else:
-            gap = min(tdc_vals) - your_afford_price
-            st.markdown(
-                f"""<div style="padding:0.5rem 0.75rem; border-radius:8px; background:#FDECEA; color:#B71C1C; border:1px solid #F5C6CB;">
-                ❌ <b>Not yet:</b> At your income (<b>${your_income:,.0f}</b>) and household size (<b>{your_hh_size}</b>), none of the options are affordable. Shortfall vs. lowest‑cost option: <b>${gap:,.0f}</b>.
-                </div>""",
-                unsafe_allow_html=True
-            )
 elif product == "apartment":
     st.info("Select Townhome or Condo to run the for‑sale model. Apartment model (rent) coming soon.")
 else:
@@ -270,20 +236,15 @@ else:
 st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 
-# ===== Who Can Afford This Home? =====
+# ===== Who Can Afford This Home? (Controls + Sentence) =====
 st.subheader("Who Can Afford This Home?")
 with st.container(border=True):
     st.markdown("""<div style="font-weight:600; margin:0 0 0.25rem 0;">Select The Region:</div>""", unsafe_allow_html=True)
     region_single = st.selectbox(label="", label_visibility="collapsed",
                                  options=[REGION_PRETTY[k] for k in REGIONS],
-                                 index=[REGION_PRETTY[k] for k in REGIONS].index(st.session_state["ui_region_pretty"]))
-    st.session_state["ui_region_pretty"] = region_single
-
+                                 index=[REGION_PRETTY[k] for k in REGIONS].index("Chittenden"))
     st.markdown("""<div style="font-weight:600; margin:0.5rem 0 0.25rem 0;">Select Household Size:</div>""", unsafe_allow_html=True)
-    household_size = st.selectbox(label="", label_visibility="collapsed", options=list(range(1,9)),
-                                  index=(st.session_state["ui_household_size"] - 1))
-    st.session_state["ui_household_size"] = household_size
-
+    household_size = st.selectbox(label="", label_visibility="collapsed", options=list(range(1,9)), index=3)
     st.markdown(
         """
         <div style="font-weight:600; margin:0.5rem 0 0.25rem 0;">
@@ -293,18 +254,16 @@ with st.container(border=True):
         unsafe_allow_html=True,
     )
     user_income = st.number_input(label="", label_visibility="collapsed",
-                                  min_value=20000, max_value=300000, step=1000,
-                                  value=st.session_state["ui_user_income"], format="%d")
-    st.session_state["ui_user_income"] = int(user_income)
+                                  min_value=20000, max_value=300000, step=1000, value=100000, format="%d")
 
     reg_key = PRETTY2REG[region_single]
     def affordability_sentence():
         if product not in ("townhome","condo") or bedrooms_global is None:
             return "Affordability details are available for for-sale products (Townhome or Condo) only."
+        df = R[reg_key]
         inc_col = f"income{household_size}"
         bed_n = int(bedrooms_global)
         buy_col = f"buy{bed_n}"
-        df = R[reg_key]
         if not {"ami", inc_col, buy_col}.issubset(df.columns):
             return "Required data not found for this region/household size."
         sub = (pd.DataFrame({
@@ -333,3 +292,31 @@ with st.container(border=True):
                 f"{bed_n} bedroom {pretty(product)}.")
     st.markdown(f"""<div style="color:#87CEEB; font-weight:500; margin-top:0.5rem;">{affordability_sentence()}</div>""",
                 unsafe_allow_html=True)
+
+# ===== Chart 2: Same Bars + Your Dynamic Affordability Line =====
+if labels and tdc_vals and product in ("townhome","condo"):
+    your_ami_pct = household_ami_percent(reg_key, household_size, user_income)
+    your_afford_price = affordability_at_percent(reg_key, int(bedrooms_global), your_ami_pct) if your_ami_pct is not None else None
+
+    fig2, ax = plt.subplots(figsize=(12, 5.5))
+    bars2 = ax.bar(labels, tdc_vals, color="skyblue", edgecolor="black")
+    ymax2 = max(tdc_vals + ([your_afford_price] if your_afford_price else [0])) * 1.12
+    ax.set_ylim(0, ymax2)
+
+    for b in bars2:
+        y = b.get_height()
+        ax.text(b.get_x() + b.get_width()/2, y + (ymax2*0.02), f"${y:,.0f}", ha="center", va="bottom", fontsize=10)
+
+    if your_afford_price is not None and your_ami_pct is not None:
+        ax.axhline(y=your_afford_price, linestyle="-", linewidth=2.5, color="#2E7D32",
+                   label=f"Your affordability — {your_ami_pct:.0f}% AMI: ${your_afford_price:,.0f}")
+
+    ax.set_ylabel("Development Cost ($)")
+    ax.set_xlabel("TDC of Your Policy Choices")
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    plt.xticks(rotation=0)
+    plt.title("Your Affordability vs. Policy-Impacted TDC")
+    if your_afford_price is not None:
+        ax.legend(loc="upper right")
+    fig2.tight_layout()
+    st.pyplot(fig2)
