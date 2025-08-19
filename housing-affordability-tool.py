@@ -236,7 +236,7 @@ else:
 st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 
-# ===== Who Can Afford This Home? (Controls + Sentence) =====
+# ===== Who Can Afford This Home? =====
 st.subheader("Who Can Afford This Home?")
 with st.container(border=True):
     st.markdown("""<div style="font-weight:600; margin:0 0 0.25rem 0;">Select The Region:</div>""", unsafe_allow_html=True)
@@ -257,6 +257,7 @@ with st.container(border=True):
                                   min_value=20000, max_value=300000, step=1000, value=100000, format="%d")
 
     reg_key = PRETTY2REG[region_single]
+
     def affordability_sentence():
         if product not in ("townhome","condo") or bedrooms_global is None:
             return "Affordability details are available for for-sale products (Townhome or Condo) only."
@@ -266,36 +267,36 @@ with st.container(border=True):
         buy_col = f"buy{bed_n}"
         if not {"ami", inc_col, buy_col}.issubset(df.columns):
             return "Required data not found for this region/household size."
-        sub = (pd.DataFrame({
-                "income": pd.to_numeric(df[inc_col], errors="coerce"),
-                "ami_frac": pd.to_numeric(df["ami"], errors="coerce"),
-                "buy": pd.to_numeric(df[buy_col], errors="coerce"),
-            }).dropna().sort_values("income").reset_index(drop=True))
-        if sub.empty:
-            return "Insufficient data to compute affordability."
-        floor_idx = sub[sub["income"] <= user_income].index.max()
-        ceil_idx  = sub[sub["income"] >= user_income].index.min()
-        if pd.isna(floor_idx) and pd.isna(ceil_idx):
-            return "Insufficient data to compute affordability."
-        if pd.isna(floor_idx):
-            use_idx = 0; status = "closest"
-        elif pd.isna(ceil_idx):
-            use_idx = len(sub)-1; status = "closest"
-        else:
-            exact = sub.index[sub["income"].eq(user_income)]
-            use_idx = int(exact[0]) if len(exact) else int(floor_idx); status = "exact" if len(exact) else "floor"
-        sel_ami_pct = float(sub.loc[use_idx,"ami_frac"])*100.0
-        sel_buy = float(sub.loc[use_idx,"buy"])
-        ami_phrase = f"closest to {sel_ami_pct:.0f}% of AMI" if status != "exact" else f"{sel_ami_pct:.0f}% of AMI"
+
+        sub = pd.DataFrame({
+            "income": pd.to_numeric(df[inc_col], errors="coerce"),
+            "ami_frac": pd.to_numeric(df["ami"], errors="coerce"),
+            "buy": pd.to_numeric(df[buy_col], errors="coerce"),
+        }).dropna().sort_values("income").reset_index(drop=True)
+        if sub.empty: return "Insufficient data to compute affordability."
+
+        # NEAREST AMI tier (absolute difference; ties go to higher AMI)
+        diffs = (sub["income"] - user_income).abs()
+        nearest_idx = int(diffs.idxmin())
+        tie_mask = diffs.eq(diffs.min())
+        if tie_mask.sum() > 1:
+            nearest_idx = int(sub.loc[tie_mask].iloc[-1].name)
+
+        sel_ami_pct = float(sub.loc[nearest_idx, "ami_frac"]) * 100.0
+        sel_buy = float(sub.loc[nearest_idx, "buy"])
+
+        # Sentence with lowercase product
+        product_sentence = pretty(product).lower()
         return (f"A {household_size} person household making {fmt_money(user_income)} "
-                f"({ami_phrase}) can afford a {fmt_money(sel_buy)} "
-                f"{bed_n} bedroom {pretty(product)}.")
+                f"(closest to {sel_ami_pct:.0f}% of AMI) can afford a {fmt_money(sel_buy)} "
+                f"{int(bedrooms_global)} bedroom {product_sentence}.")
+
     st.markdown(f"""<div style="color:#87CEEB; font-weight:500; margin-top:0.5rem;">{affordability_sentence()}</div>""",
                 unsafe_allow_html=True)
     st.write("")
 
-# ===== Chart 2: Your Affordability vs TDC (right‑axis income label + clearer legend + success/fail) =====
-st.write("")  # breathing room above the graph
+# ===== Chart 2: Your Affordability vs TDC (right-axis income label, improved legend, success/fail) =====
+st.write("")
 if labels and tdc_vals and product in ("townhome","condo"):
     bed_n = int(bedrooms_global)
     your_ami_pct = household_ami_percent(reg_key, household_size, user_income)
@@ -309,45 +310,37 @@ if labels and tdc_vals and product in ("townhome","condo"):
 
     for b in bars2:
         y = b.get_height()
-        ax.text(b.get_x() + b.get_width()/2, y + (ymax2*0.025), f"${y:,.0f}",
-                ha="center", va="bottom", fontsize=10)
+        ax.text(b.get_x() + b.get_width()/2, y + (ymax2*0.025), f"${y:,.0f}", ha="center", va="bottom", fontsize=10)
 
     if your_afford_price is not None and your_ami_pct is not None:
-        # green affordability line
-        ax.axhline(
-            y=your_afford_price,
-            linestyle="-", linewidth=2.8, color="#2E7D32",
-            label="Affordable price at your income"
+        ax.axhline(y=your_afford_price, linestyle="-", linewidth=2.8, color="#2E7D32",
+                   label="Affordable price at your income")
+        # Income label outside the plot, centered text with line break
+        ax.annotate(
+            f"Your income:\n{fmt_money(user_income)}",
+            xy=(1.0, your_afford_price), xycoords=("axes fraction", "data"),
+            xytext=(10, 0), textcoords="offset points",
+            ha="left", va="center", fontsize=10, color="#2E7D32",
+            multialignment="center",
+            bbox=dict(facecolor="white", alpha=0.0, edgecolor="none", pad=0)
         )
-    # income label OUTSIDE the plot box
-    ax.annotate(
-        f"Your income:\n   {fmt_money(user_income)}",
-        xy=(1.0, your_afford_price), xycoords=("axes fraction", "data"),
-        xytext=(10, 0), textcoords="offset points",   # push outside by ~30px
-        ha="left", va="center",
-        fontsize=10, color="#2E7D32",
-        bbox=dict(facecolor="white", alpha=0.0, edgecolor="none", pad=0)  # invisible box
-    )
+
     ax.set_ylabel("Development Cost ($)")
     ax.set_xlabel("TDC of Your Policy Choices")
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"${x:,.0f}"))
     plt.xticks(rotation=0)
     plt.title("Your Affordability vs. Policy-Impacted TDC")
 
-    # Right axis: no ticks; axis title set and spaced away from plot & income number
     ax_r = ax.twinx()
     ax_r.set_ylim(ax.get_ylim())
     ax_r.set_yticks([])
     ax_r.set_ylabel("Income Required to Purchase", labelpad=70)
-
-    # give room so the right-axis title sits beyond the income label
     fig2.subplots_adjust(top=0.90, bottom=0.20, right=0.84)
 
     ax.legend(loc="upper right")
     fig2.tight_layout()
     st.pyplot(fig2)
 
-    # --- Success / Fail message under the chart ---
     if your_afford_price is not None:
         affordable_idxs = [i for i, v in enumerate(tdc_vals) if v <= your_afford_price]
         if affordable_idxs:
