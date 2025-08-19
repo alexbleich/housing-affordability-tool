@@ -233,9 +233,6 @@ elif product == "apartment":
 else:
     st.info("No valid unit data provided.")
 
-st.write("")
-st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
-
 # ===== Who Can Afford This Home? (Controls + Sentence) =====
 st.subheader("Who Can Afford This Home?")
 with st.container(border=True):
@@ -290,13 +287,12 @@ with st.container(border=True):
         return (f"A {household_size} person household making {fmt_money(user_income)} "
                 f"({ami_phrase}) can afford a {fmt_money(sel_buy)} "
                 f"{bed_n} bedroom {pretty(product)}.")
-
     st.markdown(f"""<div style="color:#87CEEB; font-weight:500; margin-top:0.5rem;">{affordability_sentence()}</div>""",
                 unsafe_allow_html=True)
-    st.write("")  # extra space inside the box, right under the blue sentence
+    st.write("")
 
-# ===== Chart 2: Your Affordability vs TDC (with more top space & secondary axis label) =====
-st.write("")  # a little room above the graph
+# ===== Chart 2: Your Affordability vs TDC (legend, axis, line label updated) =====
+st.write("")
 if labels and tdc_vals and product in ("townhome","condo"):
     bed_n = int(bedrooms_global)
     your_ami_pct = household_ami_percent(reg_key, household_size, user_income)
@@ -305,7 +301,6 @@ if labels and tdc_vals and product in ("townhome","condo"):
     fig2, ax = plt.subplots(figsize=(12, 6))
     bars2 = ax.bar(labels, tdc_vals, color="skyblue", edgecolor="black")
 
-    # generous headroom so the legend & line don't feel cramped
     ymax2 = max(tdc_vals + ([your_afford_price] if your_afford_price else [0])) * 1.25
     ax.set_ylim(0, ymax2)
 
@@ -314,8 +309,13 @@ if labels and tdc_vals and product in ("townhome","condo"):
         ax.text(b.get_x() + b.get_width()/2, y + (ymax2*0.025), f"${y:,.0f}", ha="center", va="bottom", fontsize=10)
 
     if your_afford_price is not None and your_ami_pct is not None:
-        ax.axhline(y=your_afford_price, linestyle="-", linewidth=2.8, color="#2E7D32",
-                   label=f"Your affordability — {your_ami_pct:.0f}% AMI: ${your_afford_price:,.0f}")
+        ax.axhline(y=your_afford_price, linestyle="-", linewidth=2.8, color="#2E7D32", label="Your affordability")
+
+        # inline label next to the green line showing the user's income
+        # place near the rightmost bar with a small offset so it doesn't overlap
+        x_pos = len(labels) - 0.15
+        ax.text(x_pos, your_afford_price, f"Income: {fmt_money(user_income)}",
+                va="center", ha="left", fontsize=10, color="#2E7D32", bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=2))
 
     ax.set_ylabel("Development Cost ($)")
     ax.set_xlabel("TDC of Your Policy Choices")
@@ -323,20 +323,19 @@ if labels and tdc_vals and product in ("townhome","condo"):
     plt.xticks(rotation=0)
     plt.title("Your Affordability vs. Policy-Impacted TDC")
 
-    # secondary y-axis clarifying what the green line represents
+    # right axis: no ticks/labels, but keep an explanatory axis title
     ax_r = ax.twinx()
     ax_r.set_ylim(ax.get_ylim())
-    ax_r.set_ylabel("Estimated Max Purchase Price at Your AMI (Region × Household Size × Income)")
+    ax_r.set_yticks([])
+    ax_r.set_ylabel("Income Required to Purchase")
 
-    if your_afford_price is not None:
-        ax.legend(loc="upper right")
+    # legend: only the simple label
+    ax.legend(loc="upper right")
 
-    # extra top padding so legend/title/line have breathing room
     fig2.subplots_adjust(top=0.90, bottom=0.20)
     fig2.tight_layout()
     st.pyplot(fig2)
 
-    # success/fail message under the chart
     if your_afford_price is not None:
         affordable_idxs = [i for i, v in enumerate(tdc_vals) if v <= your_afford_price]
         if affordable_idxs:
@@ -355,3 +354,6 @@ if labels and tdc_vals and product in ("townhome","condo"):
                 </div>""",
                 unsafe_allow_html=True
             )
+
+st.write("")
+st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
