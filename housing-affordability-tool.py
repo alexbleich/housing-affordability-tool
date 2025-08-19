@@ -43,7 +43,7 @@ def load_regions(files: dict) -> dict:
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
 
-# ===== Helpers: formatting, lookup, UI =====
+# ===== Helpers =====
 PRETTY_OVERRIDES = {
     "townhome":"Townhome","condo":"Condo","apartment":"Apartment",
     "base_me_nh_code":"ME/NH Base Code","vt_energy_code":"VT Energy Code",
@@ -119,7 +119,14 @@ def nearest_ami_row(df: pd.DataFrame, hh_col: str, income: float) -> pd.Series:
     if sub.empty: return pd.Series(dtype=float)
     diffs = (sub["income"] - income).abs()
     nearest = sub.loc[diffs.eq(diffs.min())]
-    return nearest.iloc[-1]  # tie -> higher AMI
+    return nearest.iloc[-1]  # tie → higher AMI
+
+def select_pretty(label, raw_options, key=None, default_raw=None, disabled=False):
+    raw = list(raw_options)
+    labels = [pretty(o) for o in raw]
+    idx = raw.index(default_raw) if default_raw in raw else 0
+    chosen = st.selectbox(label, labels, index=idx, key=key, disabled=disabled)
+    return raw[labels.index(chosen)]
 
 def labeled_select(html_label: str, options_list, **kwargs):
     st.markdown(f'<div style="font-weight:600;margin:0.5rem 0 0.25rem 0;">{html_label}</div>', unsafe_allow_html=True)
@@ -191,31 +198,32 @@ st.write("Pick your policies below to see how it affects affordability.")
 st.markdown("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)")
 st.write("")
 
-# ===== Product & Bedrooms =====
-product = st.selectbox(
-    "What type of housing would you like to analyze?",
-    ["townhome","condo","apartment"], index=0, key="global_product"
-)
+# ===== Product & Bedrooms (pretty labels in UI) =====
+product = select_pretty("What type of housing would you like to analyze?",
+                        ["townhome","condo","apartment"], key="global_product", default_raw="townhome")
 if product in ("townhome","condo"):
     br_opts = options("bedrooms", parent=product) or ["2"]
-    bedrooms = st.selectbox("Number of bedrooms", br_opts, index=br_opts.index("2") if "2" in br_opts else 0, key="global_bedrooms")
+    bedrooms = select_pretty("Number of bedrooms", br_opts, key="global_bedrooms", default_raw=("2" if "2" in br_opts else br_opts[0]))
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
     st.info("Apartment modeling (rent-based) coming soon. For now, choose Townhome or Condo to compare for-sale products.")
 
-# ===== Per-Unit Policy Blocks =====
+# ===== Per-Unit Policy Blocks (pretty labels) =====
 num_units = st.selectbox("How many units would you like to compare?", [1,2,3,4,5], index=1, disabled=(product=="apartment"))
 units = []
 for i in range(num_units):
     st.subheader(f"{pretty(product)} {i+1}")
     with st.container(border=True):
-        code  = st.selectbox("Energy code standard", options("energy_code","default") or ["vt_energy_code"], index=0, key=f"code_{i}")
-        src   = st.selectbox("Energy source",      options("energy_source","default") or ["natural_gas"], index=0, key=f"src_{i}")
-        infra = st.selectbox("Infrastructure required?", options("infrastructure","default") or ["no","yes"], index=0, key=f"infra_{i}")
-        fin   = st.selectbox("Finish quality", options("finish_quality","default") or ["average","above_average","below_average"],
-                             index=(options("finish_quality","default") or ["average"]).index("average") if "average" in (options("finish_quality","default") or []) else 0,
-                             key=f"fin_{i}")
+        code  = select_pretty("Energy code standard", options("energy_code","default") or ["vt_energy_code"],
+                              key=f"code_{i}", default_raw="vt_energy_code", disabled=(product=="apartment"))
+        src   = select_pretty("Energy source", options("energy_source","default") or ["natural_gas"],
+                              key=f"src_{i}", default_raw="natural_gas", disabled=(product=="apartment"))
+        infra = select_pretty("Infrastructure required?", options("infrastructure","default") or ["no","yes"],
+                              key=f"infra_{i}", default_raw="no", disabled=(product=="apartment"))
+        fin   = select_pretty("Finish quality", options("finish_quality","default") or ["average","above_average","below_average"],
+                              key=f"fin_{i}", default_raw="average", disabled=(product=="apartment"))
+        if product == "apartment": st.caption("Policy selection disabled for Apartment placeholder.")
         units.append(dict(code=code, src=src, infra=infra, fin=fin))
 
 # ===== Income Thresholds =====
@@ -224,8 +232,9 @@ with st.container(border=True):
     region_pretty_opts = [REGION_PRETTY[k] for k in REGIONS]
     sel_regions_pretty = st.multiselect("Select region(s)", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
     n_amis = st.selectbox("How many Area Median Income (AMI) levels?", [1,2,3], index=0)
-    amis = [st.selectbox(f"AMI value #{i+1}", VALID_AMIS, index=VALID_AMIS.index(DEFAULT_AMIS[i] if i < len(DEFAULT_AMIS) and DEFAULT_AMIS[i] in VALID_AMIS else 150), key=f"ami_{i}")
-            for i in range(n_amis)]
+    amis = [st.selectbox(f"AMI value #{i+1}", VALID_AMIS,
+                         index=VALID_AMIS.index(DEFAULT_AMIS[i] if i < len(DEFAULT_AMIS) and DEFAULT_AMIS[i] in VALID_AMIS else 150),
+                         key=f"ami_{i}") for i in range(n_amis)]
 
 # ===== Chart 1 =====
 labels, tdc_vals, lines = [], [], {}
@@ -234,8 +243,7 @@ if product in ("townhome","condo") and units:
     for i,u in enumerate(units, 1):
         labels.append(f"Baseline {pretty(product)}" if is_baseline(u["code"],u["src"],u["infra"],u["fin"]) else f"{pretty(product)} {i}")
         tdc_vals.append(compute_tdc(sf, product, u["code"], u["src"], u["infra"], u["fin"]))
-    b_int = int(bedrooms)
-    lines = affordability_lines(sel_regions_pretty, amis, pick_afford_col(b_int, product))
+    lines = affordability_lines(sel_regions_pretty, amis, pick_afford_col(int(bedrooms), product))
 
 if labels and tdc_vals:
     draw_chart1(labels, tdc_vals, lines)
@@ -250,8 +258,8 @@ st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchas
 # ===== Who Can Afford This Home? =====
 st.subheader("Who Can Afford This Home?")
 with st.container(border=True):
-    region_pretty_list = [REGION_PRETTY[k] for k in REGIONS]
-    region_single = labeled_select("Select The Region:", region_pretty_list, index=region_pretty_list.index("Chittenden"))
+    region_list_pretty = [REGION_PRETTY[k] for k in REGIONS]
+    region_single = labeled_select("Select The Region:", region_list_pretty, index=region_list_pretty.index("Chittenden"))
     household_size = labeled_select("Select Household Size:", list(range(1,9)), index=3)
     user_income = labeled_number_input(
         "Input Household Income (<span style='white-space:nowrap;font-variant-numeric:tabular-nums lining-nums;font-feature-settings:\"tnum\" 1, \"lnum\" 1;'>$20,000 - $300,000</span>):",
@@ -261,7 +269,8 @@ with st.container(border=True):
     reg_key = PRETTY2REG[region_single]
 
     def affordability_sentence():
-        if product not in ("townhome","condo") or bedrooms is None: return "Affordability details are available for for-sale products (Townhome or Condo) only."
+        if product not in ("townhome","condo") or bedrooms is None:
+            return "Affordability details are available for for-sale products (Townhome or Condo) only."
         df = R[reg_key]; inc_col = f"income{household_size}"; buy_col = f"buy{int(bedrooms)}"
         if not {"ami", inc_col, buy_col}.issubset(df.columns): return "Required data not found for this region/household size."
         nearest = nearest_ami_row(df, inc_col, user_income)
@@ -280,7 +289,6 @@ with st.container(border=True):
 # ===== Chart 2 + Outcome =====
 st.write("")
 if labels and tdc_vals and product in ("townhome","condo"):
-    # dynamic affordability line from "Who Can Afford..." inputs
     def household_ami_percent(region_key: str, hh_size: int, income_val: float):
         df = R[region_key]; inc_col = f"income{hh_size}"
         if not {"ami", inc_col}.issubset(df.columns): return None
