@@ -222,57 +222,107 @@ st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchas
 # ===== Who Can Afford This Home? =====
 st.subheader("Who Can Afford This Home?")
 with st.container(border=True):
-    region_single = st.selectbox("Select The Region", [REGION_PRETTY[k] for k in REGIONS],
-                                 index=[REGION_PRETTY[k] for k in REGIONS].index(REGION_PRETTY["Chittenden"]))
-    household_size = st.selectbox("Select Household Size", list(range(1,9)), index=3)
 
-    # HTML label to force consistent spacing & numeral rendering; collapse widget label
+    # Region (uniform HTML label)
+    st.markdown(
+        """<div style="font-weight:600; margin:0 0 0.25rem 0;">Select The Region:</div>""",
+        unsafe_allow_html=True,
+    )
+    region_single = st.selectbox(
+        label="", label_visibility="collapsed",
+        options=[REGION_PRETTY[k] for k in REGIONS],
+        index=[REGION_PRETTY[k] for k in REGIONS].index(REGION_PRETTY["Chittenden"]),
+    )
+
+    # Household size (uniform HTML label)
+    st.markdown(
+        """<div style="font-weight:600; margin:0.5rem 0 0.25rem 0;">Select Household Size:</div>""",
+        unsafe_allow_html=True,
+    )
+    household_size = st.selectbox(
+        label="", label_visibility="collapsed",
+        options=list(range(1, 9)), index=3,
+    )
+
+    # Income (uniform HTML label with tabular nums)
     st.markdown(
         """
-        <div style="font-weight: 600; margin: 0 0 0.25rem 0;">
-          Input Household Income (<span style="white-space:nowrap; font-variant-numeric: tabular-nums lining-nums; font-feature-settings: 'tnum' 1, 'lnum' 1;">$20,000 - $300,000</span>):
+        <div style="font-weight:600; margin:0.5rem 0 0.25rem 0;">
+          Input Household Income (<span style="white-space:nowrap; font-variant-numeric: tabular-nums lining-nums; font-feature-settings:'tnum' 1, 'lnum' 1;">$20,000 - $300,000</span>):
         </div>
         """,
         unsafe_allow_html=True,
     )
-    user_income = st.number_input(label="", label_visibility="collapsed",
-                                  min_value=20000, max_value=300000, step=1000, value=100000, format="%d")
+    user_income = st.number_input(
+        label="", label_visibility="collapsed",
+        min_value=20000, max_value=300000, step=1000, value=100000, format="%d"
+    )
 
     def affordability_sentence():
-        if product not in ("townhome","condo") or bedrooms_global is None:
+        # Only for for-sale products
+        if product not in ("townhome", "condo") or bedrooms_global is None:
             return "Affordability details are available for for-sale products (Townhome or Condo) only."
 
-        reg_key = PRETTY2REG[region_single]; df = R[reg_key]
-        inc_col = f"income{household_size}"; bed_n = int(bedrooms_global); buy_col = f"buy{bed_n}"
+        reg_key = PRETTY2REG[region_single]
+        df = R[reg_key]
+
+        inc_col = f"income{household_size}"
+        bed_n = int(bedrooms_global)            # 2, 3, or 4
+        buy_col = f"buy{bed_n}"
+
+        # Validate columns
         if not {"ami", inc_col, buy_col}.issubset(df.columns):
             return "Required data not found for this region/household size."
 
-        inc_series = pd.to_numeric(df[inc_col], errors="coerce")
-        ami_series = pd.to_numeric(df["ami"], errors="coerce")     # fraction
-        buy_series = pd.to_numeric(df[buy_col], errors="coerce")
+        # Clean numerics
+        sub = (
+            pd.DataFrame({
+                "income": pd.to_numeric(df[inc_col], errors="coerce"),
+                "ami_frac": pd.to_numeric(df["ami"], errors="coerce"),   # e.g., 1.50
+                "buy": pd.to_numeric(df[buy_col], errors="coerce"),
+            })
+            .dropna()
+            .sort_values("income")
+            .reset_index(drop=True)
+        )
+        if sub.empty:
+            return "Insufficient data to compute affordability."
 
-        sub = pd.DataFrame({"income": inc_series, "ami_frac": ami_series, "buy": buy_series}).dropna()
-        if sub.empty: return "Insufficient data to compute affordability."
-        sub = sub.sort_values("income").reset_index(drop=True)
-
+        # Locate indices
         floor_idx = sub[sub["income"] <= user_income].index.max()
         ceil_idx  = sub[sub["income"] >= user_income].index.min()
 
-        if pd.isna(floor_idx) and pd.isna(ceil_idx): return "Insufficient data to compute affordability."
-        if pd.isna(floor_idx):
+        # Decide which row to use and build a single AMI phrase
+        if pd.isna(floor_idx) and pd.isna(ceil_idx):
+            return "Insufficient data to compute affordability."
+
+        if pd.isna(floor_idx):             # below minimum
             use_idx = 0
-            edge_note = f" (closest to {sub.loc[use_idx,'ami_frac']*100:.0f}% of AMI)"
-        elif pd.isna(ceil_idx):
-            use_idx = len(sub)-1
-            edge_note = f" (closest to {sub.loc[use_idx,'ami_frac']*100:.0f}% of AMI)"
+            status = "closest"
+        elif pd.isna(ceil_idx):            # above maximum
+            use_idx = len(sub) - 1
+            status = "closest"
         else:
-            use_idx = int(floor_idx); edge_note = ""
+            # Prefer exact if available; otherwise floor
+            exact = sub.index[sub["income"].eq(user_income)]
+            use_idx = int(exact[0]) if len(exact) else int(floor_idx)
+            status = "exact"
 
-        sel_ami_pct = float(sub.loc[use_idx,"ami_frac"])*100.0
-        sel_buy = float(sub.loc[use_idx,"buy"])
+        sel_ami_pct = float(sub.loc[use_idx, "ami_frac"]) * 100.0
+        sel_buy = float(sub.loc[use_idx, "buy"])
 
+        # Build AMI phrase: either "X% of AMI" OR "closest to X% of AMI"
+        ami_phrase = (f"closest to {sel_ami_pct:.0f}% of AMI") if status != "exact" else f"{sel_ami_pct:.0f}% of AMI"
+
+        # Final sentence
         return (f"A {household_size} person household making {fmt_money(user_income)} "
-                f"({sel_ami_pct:.0f}% of AMI{edge_note}) can afford a "
-                f"{fmt_money(sel_buy)} {bed_n} bedroom {pretty(product)}.")
+                f"({ami_phrase}) can afford a {fmt_money(sel_buy)} "
+                f"{bed_n} bedroom {pretty(product)}.")
 
-    st.text(affordability_sentence())
+    # Render sentence in the same sky-blue as bars
+    st.markdown(
+        f"""<div style="color:#87CEEB; font-weight:500; margin-top:0.5rem;">
+        {affordability_sentence()}
+        </div>""",
+        unsafe_allow_html=True,
+    )
