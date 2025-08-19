@@ -207,7 +207,7 @@ if product in ("townhome","condo") and units:
 if labels and tdc_vals:
     fig, ax1 = plt.subplots(figsize=(12, 6))
     bars = ax1.bar(labels, tdc_vals, color="skyblue", edgecolor="black")
-    ymax = max(tdc_vals + (list(lines.values()) or [0])) * 1.12
+    ymax = max(tdc_vals + (list(lines.values()) or [0])) * 1.15
     ax1.set_ylim(0, ymax)
     for b in bars:
         y = b.get_height()
@@ -305,7 +305,7 @@ if labels and tdc_vals and product in ("townhome","condo"):
     fig2, ax = plt.subplots(figsize=(12, 6))
     bars2 = ax.bar(labels, tdc_vals, color="skyblue", edgecolor="black")
 
-    ymax2 = max(tdc_vals + ([your_afford_price] if your_afford_price else [0])) * 1.25
+    ymax2 = max(tdc_vals + ([your_afford_price] if your_afford_price else [0])) * 1.15
     ax.set_ylim(0, ymax2)
 
     for b in bars2:
