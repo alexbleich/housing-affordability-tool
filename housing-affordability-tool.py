@@ -233,6 +233,9 @@ elif product == "apartment":
 else:
     st.info("No valid unit data provided.")
 
+st.write("")
+st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
+
 # ===== Who Can Afford This Home? (Controls + Sentence) =====
 st.subheader("Who Can Afford This Home?")
 with st.container(border=True):
@@ -291,8 +294,8 @@ with st.container(border=True):
                 unsafe_allow_html=True)
     st.write("")
 
-# ===== Chart 2: Your Affordability vs TDC (legend, axis, line label updated) =====
-st.write("")
+# ===== Chart 2: Your Affordability vs TDC (polished label & axis spacing) =====
+st.write("")  # breathing room above the graph
 if labels and tdc_vals and product in ("townhome","condo"):
     bed_n = int(bedrooms_global)
     your_ami_pct = household_ami_percent(reg_key, household_size, user_income)
@@ -306,16 +309,25 @@ if labels and tdc_vals and product in ("townhome","condo"):
 
     for b in bars2:
         y = b.get_height()
-        ax.text(b.get_x() + b.get_width()/2, y + (ymax2*0.025), f"${y:,.0f}", ha="center", va="bottom", fontsize=10)
+        ax.text(b.get_x() + b.get_width()/2, y + (ymax2*0.025), f"${y:,.0f}",
+                ha="center", va="bottom", fontsize=10)
 
+    # Green line + clearer legend text
     if your_afford_price is not None and your_ami_pct is not None:
-        ax.axhline(y=your_afford_price, linestyle="-", linewidth=2.8, color="#2E7D32", label="Your affordability")
-
-        # inline label next to the green line showing the user's income
-        # place near the rightmost bar with a small offset so it doesn't overlap
-        x_pos = len(labels) - 0.15
-        ax.text(x_pos, your_afford_price, f"Income: {fmt_money(user_income)}",
-                va="center", ha="left", fontsize=10, color="#2E7D32", bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=2))
+        ax.axhline(
+            y=your_afford_price,
+            linestyle="-", linewidth=2.8, color="#2E7D32",
+            label="Max affordable price (your income)"
+        )
+        # Inline income label that visually touches the line (2px offset)
+        x_right = len(labels) - 0.05
+        ax.annotate(
+            f"Income: {fmt_money(user_income)}",
+            xy=(x_right, your_afford_price), xytext=(2, 0),
+            textcoords="offset points", va="center", ha="left",
+            fontsize=10, color="#2E7D32",
+            bbox=dict(facecolor="white", alpha=0.75, edgecolor="none", pad=2)
+        )
 
     ax.set_ylabel("Development Cost ($)")
     ax.set_xlabel("TDC of Your Policy Choices")
@@ -323,26 +335,30 @@ if labels and tdc_vals and product in ("townhome","condo"):
     plt.xticks(rotation=0)
     plt.title("Your Affordability vs. Policy-Impacted TDC")
 
-    # right axis: no ticks/labels, but keep an explanatory axis title
+    # Right axis: no ticks; title pushed farther from the plot
     ax_r = ax.twinx()
     ax_r.set_ylim(ax.get_ylim())
     ax_r.set_yticks([])
-    ax_r.set_ylabel("Income Required to Purchase")
+    ax_r.set_ylabel("Income Required to Purchase", labelpad=60)
 
-    # legend: only the simple label
+    # Room on the right so axis title sits beyond the income label
+    fig2.subplots_adjust(top=0.90, bottom=0.20, right=0.84)
+
+    # Minimal legend with intuitive text
     ax.legend(loc="upper right")
 
-    fig2.subplots_adjust(top=0.90, bottom=0.20)
     fig2.tight_layout()
     st.pyplot(fig2)
 
+    # Success/fail message under the chart
     if your_afford_price is not None:
         affordable_idxs = [i for i, v in enumerate(tdc_vals) if v <= your_afford_price]
         if affordable_idxs:
             best_i = min(affordable_idxs, key=lambda i: tdc_vals[i])
             st.markdown(
                 f"""<div style="padding:0.5rem 0.75rem; border-radius:8px; background:#E6F4EA; color:#1E7D34; border:1px solid #C8E6C9;">
-                ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>), you can afford <b>{len(affordable_idxs)} of {len(tdc_vals)}</b> option(s). Lowest‑cost affordable: <b>{labels[best_i]}</b>.
+                ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                you can afford <b>{len(affordable_idxs)} of {len(tdc_vals)}</b> option(s). Lowest‑cost affordable: <b>{labels[best_i]}</b>.
                 </div>""",
                 unsafe_allow_html=True
             )
@@ -350,10 +366,8 @@ if labels and tdc_vals and product in ("townhome","condo"):
             gap = min(tdc_vals) - your_afford_price
             st.markdown(
                 f"""<div style="padding:0.5rem 0.75rem; border-radius:8px; background:#FDECEA; color:#B71C1C; border:1px solid #F5C6CB;">
-                ❌ <b>Not yet:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>), none of the options are affordable. Shortfall vs. lowest‑cost option: <b>{fmt_money(gap)}</b>.
+                ❌ <b>Not yet:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                none of the options are affordable. Shortfall vs. lowest‑cost option: <b>{fmt_money(gap)}</b>.
                 </div>""",
                 unsafe_allow_html=True
             )
-
-st.write("")
-st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
