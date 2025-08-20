@@ -29,11 +29,11 @@ REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "R
 PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 
 VALID_AMIS = [30] + list(range(50, 155, 5))
-DEFAULT_AMIS = [150, 120, 100]  # used for indexing fallback
+DEFAULT_AMIS = [150, 120, 100]
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
 
-# Policy packages (ids -> label + components)
+# Policy packages
 PKG = {
     "baseline": {
         "label": "Baseline",
@@ -147,7 +147,7 @@ def affordability_lines(region_pretty_list, amis, col):
         df = R[PRETTY2REG[rp]]
         if col not in df.columns: continue
         for ami in sorted(amis):
-            ami_capped = min(ami, 150)  # enforce cap in selection
+            ami_capped = min(ami, 150)  # enforce cap
             m = df[AMI_COL].eq(ami_capped/100.0)
             if m.any():
                 lines[f"{ami_capped}% AMI - {rp}"] = float(pd.to_numeric(df.loc[m, col], errors="coerce").iloc[0])
@@ -166,7 +166,7 @@ def nearest_ami_row(df: pd.DataFrame, hh_col: str, income: float) -> pd.Series:
     idx = diffs[diffs.eq(diffs.min())].index[-1]
     return pd.Series({"income": float(inc.loc[idx]), "ami_frac": float(ami.loc[idx])}, name=idx)
 
-# ===== Plot Utilities with enforced y-limits =====
+# ===== Plot Utilities =====
 def _bar_with_values(ax, labels, values, pad_ratio):
     bars = ax.bar(labels, values, color="skyblue", edgecolor="black")
     for b in bars:
@@ -182,23 +182,20 @@ def _apply_ylim(ax, ax2, ymax):
 # ===== Plotting =====
 def draw_chart1(labels, tdc_vals, lines):
     fig, ax = plt.subplots(figsize=(12, 6))
-    # Compute ymax = 1.2 * max(top bar, top line)
     top_bar = max(tdc_vals) if tdc_vals else 1.0
     top_line = max(lines.values()) if lines else 0.0
     ymax = 1.2 * max(top_bar, top_line, 1.0)
 
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.02)
 
-    # Lines (sorted for deterministic legend)
     if lines:
         for i, (lab, val) in enumerate(sorted(lines.items(), key=lambda kv: kv[0])):
             ax.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
 
-    _apply_ylim(ax, None, ymax)  # primary first, then create twin so it inherits limits
+    _apply_ylim(ax, None, ymax)
     ax2 = ax.twinx()
     _apply_ylim(ax, ax2, ymax)
 
-    # Right axis ticks/labels at line values
     if lines:
         ordered = [k for k, _ in sorted(lines.items(), key=lambda kv: kv[0])]
         vals = [lines[k] for k in ordered]
@@ -208,9 +205,8 @@ def draw_chart1(labels, tdc_vals, lines):
     else:
         ax2.set_yticks([])
 
-    # Labels/Titles (per spec)
     ax.set_ylabel("Total Development Cost (TDC)")
-    ax.set_xlabel("")  # no x label
+    ax.set_xlabel("")
     ax2.set_ylabel("Max. Affordable Purchase Price (% AMI)")
     ax.set_title("Total Development Cost vs. What Households Can Afford")
 
@@ -226,9 +222,12 @@ def draw_chart2(labels, tdc_vals, afford_price, user_income):
 
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.025)
 
+    line_handle = None
     if afford_price is not None:
-        ax.axhline(y=afford_price, linestyle="-", linewidth=2.8, color="#2E7D32",
-                   label="Affordable price at your income")
+        line_handle = ax.axhline(
+            y=afford_price, linestyle="-", linewidth=2.8, color="#2E7D32",
+            label="Affordable price at your income"
+        )
         ax.annotate(
             f"Your income:\n{fmt_money(user_income)}",
             xy=(1.0, afford_price), xycoords=("axes fraction","data"),
@@ -240,15 +239,24 @@ def draw_chart2(labels, tdc_vals, afford_price, user_income):
     _apply_ylim(ax, None, ymax)
     rax = ax.twinx()
     _apply_ylim(ax, rax, ymax)
-    rax.set_yticks([])  # we keep no ticks, only the label as requested
+    rax.set_yticks([])
 
-    # Labels/Titles (per spec)
     ax.set_ylabel("Total Development Cost (TDC)")
-    ax.set_xlabel("")  # no x label
+    ax.set_xlabel("")
     rax.set_ylabel("Income Req. to Purchase")
+    # move the secondary y-label rightward so it sits to the right of the green label
+    rax.yaxis.set_label_coords(1.12, 0.5)
+
     ax.set_title("Purchase Ability by Income, Household Size, and Region")
 
-    ax.legend(loc="upper right")
+    if line_handle is not None:
+        ax.legend(
+            handles=[line_handle],
+            labels=["Affordable price at your income"],
+            loc="upper right",
+            title="Income level mapped to affordable purchase price"
+        )
+
     plt.xticks(rotation=0)
     fig.tight_layout()
     st.pyplot(fig)
@@ -273,8 +281,7 @@ def _apply_package(i, pkg_key):
     u["package"] = pkg_key
     u["components"] = dict(code=PKG[pkg_key]["code"], src=PKG[pkg_key]["src"],
                            infra=PKG[pkg_key]["infra"], fin=PKG[pkg_key]["fin"])
-    u["is_custom"] = False  # re-enable package radio
-    # keep custom_label as-is (only applied when is_custom=True)
+    u["is_custom"] = False
 
 def _update_component(i, field, value):
     u = st.session_state.units[i]
@@ -321,7 +328,7 @@ else:
 
 st.divider()
 
-# ===== Step 2 — Units & Policy Packages =====
+# ===== Step 2 — Policies per Unit =====
 st.header("Step 2 — Policies per Unit")
 num_units = st.selectbox("How many units would you like to compare?", [1,2,3,4,5], index=1, disabled=apartment_mode)
 
@@ -336,7 +343,6 @@ def render_unit_card(i: int, disabled: bool = False):
     with st.container(border=True):
         cols = st.columns([1, 1], vertical_alignment="center")
         with cols[0]:
-            # Package radio — greys out if customized
             pkg_disabled = disabled or u["is_custom"]
             pkg_choice = st.radio(
                 "Policy package",
@@ -346,7 +352,6 @@ def render_unit_card(i: int, disabled: bool = False):
                 key=f"pkg_{i}",
                 disabled=pkg_disabled
             )
-            # Inline notice when greyed out
             if u["is_custom"] and not disabled:
                 st.caption(f"Modified from “{PKG[u['package']]['label']}”. Click “Reset to package” to change package.")
 
@@ -354,43 +359,33 @@ def render_unit_card(i: int, disabled: bool = False):
             c1, c2 = st.columns([1,1])
             with c1:
                 if i > 0 and st.button("Duplicate from previous", key=f"dup_{i}", disabled=disabled):
-                    _duplicate_from_previous(i)
-                    st.rerun()
+                    _duplicate_from_previous(i); st.rerun()
             with c2:
                 if u["is_custom"] and st.button("Reset to package", key=f"reset_{i}", disabled=disabled):
-                    _apply_package(i, u["package"])
-                    st.rerun()
+                    _apply_package(i, u["package"]); st.rerun()
 
-        # Apply package if changed (only when radio enabled)
         if not (u["is_custom"] or disabled) and pkg_choice != u["package"]:
             _apply_package(i, pkg_choice)
 
-        # Advanced expander
         with st.expander("Advanced: adjust components", expanded=False):
-            # options lookups
             opt_code  = options("energy_code", DEFAULT_PARENT) or ["vt_energy_code"]
             opt_src   = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
             opt_infra = options("infrastructure", DEFAULT_PARENT) or ["no","yes"]
             opt_fin   = options("finish_quality", DEFAULT_PARENT) or ["average","above_average","below_average"]
 
-            code  = st.selectbox("Energy code standard",
-                                 options=opt_code,
+            code  = st.selectbox("Energy code standard", opt_code,
                                  index=(opt_code.index(u["components"]["code"]) if u["components"]["code"] in opt_code else 0),
                                  format_func=pretty, key=f"code_{i}", disabled=disabled)
-            src   = st.selectbox("Energy source",
-                                 options=opt_src,
+            src   = st.selectbox("Energy source", opt_src,
                                  index=(opt_src.index(u["components"]["src"]) if u["components"]["src"] in opt_src else 0),
                                  format_func=pretty, key=f"src_{i}", disabled=disabled)
-            infra = st.selectbox("Infrastructure required?",
-                                 options=opt_infra,
+            infra = st.selectbox("Infrastructure required?", opt_infra,
                                  index=(opt_infra.index(u["components"]["infra"]) if u["components"]["infra"] in opt_infra else 0),
                                  format_func=pretty, key=f"infra_{i}", disabled=disabled)
-            fin   = st.selectbox("Finish quality",
-                                 options=opt_fin,
+            fin   = st.selectbox("Finish quality", opt_fin,
                                  index=(opt_fin.index(u["components"]["fin"]) if u["components"]["fin"] in opt_fin else 0),
                                  format_func=pretty, key=f"fin_{i}", disabled=disabled)
 
-            # Persist component changes
             for field, val in [("code", code), ("src", src), ("infra", infra), ("fin", fin)]:
                 if val != u["components"][field]:
                     _update_component(i, field, val)
@@ -400,13 +395,8 @@ def render_unit_card(i: int, disabled: bool = False):
 
         label = PKG[u["package"]]["label"] if not u["is_custom"] else (u.get("custom_label") or "Custom")
 
-    return {
-        "label": label,
-        "code": u["components"]["code"],
-        "src": u["components"]["src"],
-        "infra": u["components"]["infra"],
-        "fin": u["components"]["fin"],
-    }
+    return {"label": label, "code": u["components"]["code"], "src": u["components"]["src"],
+            "infra": u["components"]["infra"], "fin": u["components"]["fin"]}
 
 units = []
 for i in range(num_units):
@@ -415,16 +405,13 @@ for i in range(num_units):
 
 st.divider()
 
-# ===== Chart 1 Controls — AMI lines (ALWAYS ON, above chart) =====
+# ===== Chart 1 Controls (always on, above chart) =====
 st.subheader("Area Median Income (AMI) lines for Chart 1")
 with st.container(border=True):
-    # How many AMI lines
     n_amis = st.selectbox("How many Area Median Income (AMI) levels?", [1,2,3], index=0)
-    # Default AMIs when 3 selected: 100, 150, 80 (in that order)
     def default_ami_for_idx(i):
         defaults3 = [100, 150, 80]
         if n_amis == 3: return defaults3[i]
-        # fallback: use typical values
         return [100, 120][i] if n_amis == 2 else 100
     amis = []
     for i in range(n_amis):
@@ -435,8 +422,6 @@ with st.container(border=True):
             key=f"ami_{i}"
         )
         amis.append(ami_val)
-
-    # Regions for Chart 1 lines
     region_pretty_opts = [REGION_PRETTY[k] for k in REGIONS]
     sel_regions_pretty = st.multiselect("Regions to show on Chart 1", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
 
@@ -445,7 +430,6 @@ st.divider()
 # ===== Chart 1 =====
 if not apartment_mode and units:
     st.subheader("Do These Policy Choices Put Homes Within Reach?")
-    # Build bars and lines
     labels, tdc_vals = [], []
     for u in units:
         labels.append(u["label"])
@@ -462,8 +446,11 @@ st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchas
 
 st.divider()
 
-# ===== Chart 2 Controls (below Chart 1 controls) =====
-st.subheader("Household Settings for Chart 2")
+# ===== Step 3 — Specify household context =====
+st.header("Step 3 — Specify household context")
+
+st.subheader("Household Settings")
+st.caption("Select region, household size, and income to assess affordability for local households.")
 with st.container(border=True):
     region_list_pretty = [REGION_PRETTY[k] for k in REGIONS]
     region_single = st.selectbox("Region", region_list_pretty, index=region_list_pretty.index("Chittenden"))
