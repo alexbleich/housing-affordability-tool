@@ -415,7 +415,7 @@ for i in range(num_units):
 st.divider()
 
 # ===== Chart 1 Controls (always on, above chart) =====
-st.header("Step 3 — Compare Costs with Affordability)
+st.header("Step 3 — Compare Costs with Affordability")
 st.subheader("Affordability Thresholds")
 with st.container(border=True):
     n_amis = st.selectbox("How many Area Median Income (AMI) levels?", [1,2,3], index=0)
