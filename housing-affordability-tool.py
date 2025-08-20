@@ -215,45 +215,56 @@ def draw_chart1(labels, tdc_vals, lines):
     st.pyplot(fig)
 
 def draw_chart2(labels, tdc_vals, afford_price, user_income):
+    """
+    Bars = TDC per unit. Single green line = affordable purchase price at the selected income/household.
+    - Legend shows the green line with the exact text required (no auto-named '_child*').
+    - Right Y-axis label is pushed far right so it doesn't collide with the green annotation.
+    - Top of chart = 1.2 × max(top bar, affordability line).
+    """
     fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Y max rule: include bars and the affordability line
     top_bar = max(tdc_vals) if tdc_vals else 1.0
-    top_line = afford_price or 0.0
+    top_line = float(afford_price) if afford_price is not None else 0.0
     ymax = 1.2 * max(top_bar, top_line, 1.0)
 
+    # Bars + value labels
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.025)
 
+    # Affordability line with explicit label for the legend
     line_handle = None
     if afford_price is not None:
         line_handle = ax.axhline(
-            y=afford_price, linestyle="-", linewidth=2.8, color="#2E7D32",
+            y=float(afford_price),
+            linestyle="-",
+            linewidth=2.8,
+            color="#2E7D32",
+            label="Income level mapped to affordable purchase price",  # <- legend text
         )
         ax.annotate(
             f"Your income:\n{fmt_money(user_income)}",
-            xy=(1.0, afford_price), xycoords=("axes fraction","data"),
+            xy=(1.0, float(afford_price)), xycoords=("axes fraction", "data"),
             xytext=(10, 0), textcoords="offset points",
             ha="left", va="center", fontsize=10, color="#2E7D32", multialignment="center",
-            bbox=dict(facecolor="white", alpha=0.0, edgecolor="none", pad=0)
+            bbox=dict(facecolor="white", alpha=0.0, edgecolor="none", pad=0),
         )
 
+    # Apply consistent limits; create right axis and push its label to the far right
     _apply_ylim(ax, None, ymax)
     rax = ax.twinx()
     _apply_ylim(ax, rax, ymax)
-    rax.set_yticks([])
+    rax.set_yticks([])  # ticks hidden by design
+    rax.set_ylabel("Income Req. to Purchase")
+    rax.yaxis.set_label_coords(1.18, 0.5)  # push right so it sits beyond the green annotation
 
+    # Titles / axis labels (no X label)
     ax.set_ylabel("Total Development Cost (TDC)")
     ax.set_xlabel("")
-    rax.set_ylabel("Income Req. to Purchase")
-    # move the secondary y-label rightward so it sits to the right of the green label
-    rax.yaxis.set_label_coords(1.12, 0.5)
-
     ax.set_title("Purchase Ability by Income, Household Size, and Region")
 
+    # Legend: show only the green line with the exact label (no '_child*')
     if line_handle is not None:
-        ax.legend(
-            handles=[line_handle],
-            loc="upper right",
-            title="Income level mapped to affordable purchase price"
-        )
+        ax.legend(handles=[line_handle], loc="upper right", frameon=True)
 
     plt.xticks(rotation=0)
     fig.tight_layout()
