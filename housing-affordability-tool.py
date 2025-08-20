@@ -337,8 +337,8 @@ else:
 
 st.divider()
 
-# ===== Step 2 — How Different Policies Affect the Same Unit =====
-st.header("Step 2 — How Different Policies Affect the Same Unit")
+# ===== Step 2 — Pick your Policies =====
+st.header("Step 2 — Pick your Policies")
 num_units = st.selectbox("How many units would you like to compare?", [1,2,3,4,5], index=1, disabled=apartment_mode)
 
 def _ensure_and_get_units():
