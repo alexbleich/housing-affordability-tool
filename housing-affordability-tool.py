@@ -435,8 +435,6 @@ with st.container(border=True):
     region_pretty_opts = [REGION_PRETTY[k] for k in REGIONS]
     sel_regions_pretty = st.multiselect("Select region(s)", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
 
-st.divider()
-
 # ===== Chart 1 =====
 if not apartment_mode and units:
     st.subheader("Do These Policy Choices Put Homes Within Reach?")
@@ -450,9 +448,6 @@ elif apartment_mode:
     st.info("Select Townhome or Condo to run the for‑sale model. Apartment model (rent) coming soon.")
 else:
     st.info("No valid unit data provided.")
-
-st.write("")
-st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 
 st.divider()
 
@@ -516,3 +511,6 @@ if not apartment_mode and units:
                 ❌ <b>Not yet:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
                 none of the options are affordable. Shortfall vs. lowest‑cost option: <b>{fmt_money(gap)}</b>.
                 </div>""", unsafe_allow_html=True)
+
+st.write("")
+st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
