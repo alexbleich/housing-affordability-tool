@@ -25,7 +25,6 @@ REGIONS = {
     "Addison":    DATA / "addison_ami.csv",
     "Vermont":    DATA / "vermont_ami.csv",
 }
-
 REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "Rest of Vermont"}
 PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 
@@ -33,7 +32,22 @@ VALID_AMIS = [30] + list(range(50, 155, 5))
 DEFAULT_AMIS = [150, 120, 100]
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
-BASELINE = {"code": "vt_energy_code", "src": "natural_gas", "infra": "no", "fin": "average"}
+
+# Policy packages (keys are internal ids; labels are what users see)
+PKG = {
+    "baseline": {
+        "label": "Baseline",
+        "code": "vt_energy_code", "src": "natural_gas", "infra": "no", "fin": "average",
+    },
+    "top": {
+        "label": "Top-of-the-Line",
+        "code": "passive_house", "src": "geothermal", "infra": "yes", "fin": "above_average",
+    },
+    "below": {
+        "label": "Below Baseline",
+        "code": "base_me_nh_code", "src": "natural_gas", "infra": "no", "fin": "below_average",
+    },
+}
 
 # ===== Data Loading =====
 @st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: str(p)})
@@ -68,7 +82,7 @@ def load_regions(files: dict) -> dict:
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
 
-# ===== Helpers =====
+# ===== Helpers (formatting, assumptions) =====
 PRETTY_OVERRIDES = {
     "townhome":"Townhome","condo":"Condo","apartment":"Apartment","studio":"Studio",
     "base_me_nh_code":"ME/NH Base Code","vt_energy_code":"VT Energy Code",
@@ -80,8 +94,7 @@ TOKEN_UPPER = {" Ami":" AMI"," Vt ":" VT "," Nh ":" NH "," Me ":" ME "," Evt ":"
 
 def pretty(x: str) -> str:
     s = str(x).lower().strip()
-    if s in PRETTY_OVERRIDES:
-        return PRETTY_OVERRIDES[s]
+    if s in PRETTY_OVERRIDES: return PRETTY_OVERRIDES[s]
     t = s.replace("_"," ").title()
     for k, v in TOKEN_UPPER.items():
         t = t.replace(k, v)
@@ -124,10 +137,6 @@ def compute_tdc(sf, htype, code, src, infra, fin):
     per_sf += one_val("infrastructure", infra, DEFAULT_PARENT, "per_sf")
     return sf * per_sf
 
-def is_baseline(code, src, infra, fin):
-    return (code == BASELINE["code"] and src == BASELINE["src"] and
-            infra == BASELINE["infra"] and fin == BASELINE["fin"])
-
 def pick_afford_col(b_int, unit_type):
     b = int(np.clip(b_int, 0, 5))
     return f"buy{max(1,b)}" if unit_type in ("townhome","condo") else f"rent{b}"
@@ -136,8 +145,7 @@ def affordability_lines(region_pretty_list, amis, col):
     lines = {}
     for rp in region_pretty_list:
         df = R[PRETTY2REG[rp]]
-        if col not in df.columns:
-            continue
+        if col not in df.columns: continue
         for ami in sorted(amis):
             m = df[AMI_COL].eq(ami/100.0)
             if m.any():
@@ -154,21 +162,10 @@ def nearest_ami_row(df: pd.DataFrame, hh_col: str, income: float) -> pd.Series:
     order = inc.argsort()
     inc = inc.iloc[order]; ami = ami.iloc[order]
     diffs = (inc - income).abs()
-    idx = diffs[diffs.eq(diffs.min())].index[-1]  # tie → higher AMI
+    idx = diffs[diffs.eq(diffs.min())].index[-1]
     return pd.Series({"income": float(inc.loc[idx]), "ami_frac": float(ami.loc[idx])}, name=idx)
 
-def select_pretty(label, raw_options, key=None, default_raw=None, disabled=False):
-    raw = list(raw_options)
-    labels = [pretty(o) for o in raw]
-    idx = raw.index(default_raw) if default_raw in raw else 0
-    chosen = st.selectbox(label, labels, index=idx, key=key, disabled=disabled)
-    return raw[labels.index(chosen)]
-
-def _labeled(label_html: str, control_fn, **kwargs):
-    st.markdown(f'<div style="font-weight:600;margin:0.5rem 0 0.25rem 0;">{label_html}</div>', unsafe_allow_html=True)
-    return control_fn(label="", label_visibility="collapsed", **kwargs)
-
-# ===== Plot Utilities (no visual change) =====
+# ===== Plot Utilities =====
 def _bar_with_values(ax, labels, values, pad_ratio):
     bars = ax.bar(labels, values, color="skyblue", edgecolor="black")
     ymax = max(values) * (1 + pad_ratio + 0.1) if values else 1.0
@@ -179,13 +176,10 @@ def _bar_with_values(ax, labels, values, pad_ratio):
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
     return ymax
 
-# ===== Plotting (same titles/labels/colors) =====
 def draw_chart1(labels, tdc_vals, lines):
     fig, ax = plt.subplots(figsize=(12, 6))
-    ymax = _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.02)
-    all_vals = list(lines.values()) if lines else [0]
+    _ = _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.02)
     if lines:
-        # stable ordering so legend colors don't jump
         for i, (lab, val) in enumerate(sorted(lines.items(), key=lambda kv: kv[0])):
             ax.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
         ax.legend(loc="upper right")
@@ -204,7 +198,7 @@ def draw_chart1(labels, tdc_vals, lines):
 
 def draw_chart2(labels, tdc_vals, afford_price, user_income):
     fig, ax = plt.subplots(figsize=(12, 6))
-    ymax = _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.025)
+    _ = _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.025)
     if afford_price is not None:
         ax.axhline(y=afford_price, linestyle="-", linewidth=2.8, color="#2E7D32",
                    label="Affordable price at your income")
@@ -226,60 +220,192 @@ def draw_chart2(labels, tdc_vals, afford_price, user_income):
     fig.tight_layout()
     st.pyplot(fig)
 
-# ===== Header (unchanged UX) =====
+# ===== Session State (units) =====
+def _ensure_units(n):
+    if "units" not in st.session_state:
+        st.session_state.units = []
+    while len(st.session_state.units) < n:
+        st.session_state.units.append({
+            "package": "baseline",
+            "components": dict(code=PKG["baseline"]["code"], src=PKG["baseline"]["src"],
+                               infra=PKG["baseline"]["infra"], fin=PKG["baseline"]["fin"]),
+            "is_custom": False,
+            "custom_label": "Custom",
+        })
+    if len(st.session_state.units) > n:
+        st.session_state.units = st.session_state.units[:n]
+
+def _apply_package(i, pkg_key):
+    u = st.session_state.units[i]
+    u["package"] = pkg_key
+    u["components"] = dict(code=PKG[pkg_key]["code"], src=PKG[pkg_key]["src"],
+                           infra=PKG[pkg_key]["infra"], fin=PKG[pkg_key]["fin"])
+    u["is_custom"] = False
+    # keep custom_label but it's only used when is_custom=True
+
+def _update_component(i, field, value):
+    u = st.session_state.units[i]
+    u["components"][field] = value
+    # recompute custom flag vs current package
+    p = PKG[u["package"]]
+    u["is_custom"] = any([
+        u["components"]["code"]  != p["code"],
+        u["components"]["src"]   != p["src"],
+        u["components"]["infra"] != p["infra"],
+        u["components"]["fin"]   != p["fin"],
+    ])
+
+def _duplicate_from_previous(i):
+    prev = st.session_state.units[i-1]
+    st.session_state.units[i] = {
+        "package": prev["package"],
+        "components": prev["components"].copy(),
+        "is_custom": prev["is_custom"],
+        "custom_label": prev.get("custom_label", "Custom"),
+    }
+
+# ===== UI: Wizard Steps =====
 st.title("🏘️ Housing Affordability Visualizer")
 st.write("Pick your policies below to see how it affects affordability.")
 st.markdown("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)")
 st.write("")
 
-# ===== Product & Bedrooms (unchanged UX) =====
-product = select_pretty("What type of housing would you like to analyze?",
-                        ["townhome","condo","apartment"], key="global_product", default_raw="townhome")
+# --- Step 1: Housing Type (and Bedrooms if for-sale) ---
+st.header("Step 1 — Housing Type")
+product = st.radio("What kind of housing are we talking about?",
+                   ["townhome","condo","apartment"],
+                   format_func=pretty, horizontal=True, key="global_product")
 apartment_mode = (product == "apartment")
 
 if not apartment_mode:
     br_opts = options("bedrooms", parent=product) or ["2"]
-    bedrooms = select_pretty("Number of bedrooms", br_opts, key="global_bedrooms",
-                             default_raw=("2" if "2" in br_opts else br_opts[0]))
+    bedrooms = st.selectbox("Number of bedrooms",
+                            [*br_opts], index=(br_opts.index("2") if "2" in br_opts else 0),
+                            format_func=pretty, key="global_bedrooms")
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
     st.info("Apartment modeling (rent-based) coming soon. For now, choose Townhome or Condo to compare for-sale products.")
 
-# ===== Per-Unit Policy Blocks (unchanged UX) =====
+st.divider()
+
+# --- Step 2: Units & Policy Packages ---
+st.header("Step 2 — Policies per Unit")
 num_units = st.selectbox("How many units would you like to compare?", [1,2,3,4,5], index=1, disabled=apartment_mode)
-units = []
-for i in range(num_units):
+_ensure_units(num_units)
+
+def render_unit_card(i: int, disabled: bool = False):
+    u = st.session_state.units[i]
     st.subheader(f"{pretty(product)} {i+1}")
     with st.container(border=True):
-        code  = select_pretty("Energy code standard", options("energy_code","default") or ["vt_energy_code"],
-                              key=f"code_{i}", default_raw="vt_energy_code", disabled=apartment_mode)
-        src   = select_pretty("Energy source", options("energy_source","default") or ["natural_gas"],
-                              key=f"src_{i}", default_raw="natural_gas", disabled=apartment_mode)
-        infra = select_pretty("Infrastructure required?", options("infrastructure","default") or ["no","yes"],
-                              key=f"infra_{i}", default_raw="no", disabled=apartment_mode)
-        fin   = select_pretty("Finish quality", options("finish_quality","default") or ["average","above_average","below_average"],
-                              key=f"fin_{i}", default_raw="average", disabled=apartment_mode)
-        if apartment_mode: st.caption("Policy selection disabled for Apartment placeholder.")
-        units.append(dict(code=code, src=src, infra=infra, fin=fin))
+        cols = st.columns([1, 1], vertical_alignment="center")
+        with cols[0]:
+            # Package radio
+            pkg_choice = st.radio(
+                "Policy package",
+                options=list(PKG.keys()),
+                format_func=lambda k: PKG[k]["label"],
+                index=list(PKG.keys()).index(u["package"]),
+                key=f"pkg_{i}",
+                disabled=disabled
+            )
+        with cols[1]:
+            c1, c2 = st.columns([1,1])
+            with c1:
+                if i > 0 and st.button("Duplicate from previous", key=f"dup_{i}", disabled=disabled):
+                    _duplicate_from_previous(i)
+                    st.rerun()
+            with c2:
+                # Show reset only if custom
+                if u["is_custom"] and st.button("Reset to package", key=f"reset_{i}", disabled=disabled):
+                    _apply_package(i, u["package"])
+                    st.rerun()
 
-# ===== Income Thresholds (unchanged UX) =====
-st.subheader("Income Thresholds")
+        # Applying package selection
+        if pkg_choice != u["package"]:
+            _apply_package(i, pkg_choice)
+
+        # Advanced expander
+        with st.expander("Advanced: adjust components", expanded=False):
+            code  = st.selectbox("Energy code standard",
+                                 options=options("energy_code", DEFAULT_PARENT) or ["vt_energy_code"],
+                                 index=0 if u["components"]["code"]  not in options("energy_code", DEFAULT_PARENT) else
+                                       (options("energy_code", DEFAULT_PARENT)).index(u["components"]["code"]),
+                                 format_func=pretty, key=f"code_{i}", disabled=disabled)
+            src   = st.selectbox("Energy source",
+                                 options=options("energy_source", DEFAULT_PARENT) or ["natural_gas"],
+                                 index=0 if u["components"]["src"]   not in options("energy_source", DEFAULT_PARENT) else
+                                       (options("energy_source", DEFAULT_PARENT)).index(u["components"]["src"]),
+                                 format_func=pretty, key=f"src_{i}", disabled=disabled)
+            infra = st.selectbox("Infrastructure required?",
+                                 options=options("infrastructure", DEFAULT_PARENT) or ["no","yes"],
+                                 index=0 if u["components"]["infra"] not in options("infrastructure", DEFAULT_PARENT) else
+                                       (options("infrastructure", DEFAULT_PARENT)).index(u["components"]["infra"]),
+                                 format_func=pretty, key=f"infra_{i}", disabled=disabled)
+            fin   = st.selectbox("Finish quality",
+                                 options=options("finish_quality", DEFAULT_PARENT) or ["average","above_average","below_average"],
+                                 index=0 if u["components"]["fin"]   not in options("finish_quality", DEFAULT_PARENT) else
+                                       (options("finish_quality", DEFAULT_PARENT)).index(u["components"]["fin"]),
+                                 format_func=pretty, key=f"fin_{i}", disabled=disabled)
+
+            # Persist component changes
+            for field, val in [("code", code), ("src", src), ("infra", infra), ("fin", fin)]:
+                if val != u["components"][field]:
+                    _update_component(i, field, val)
+
+            # Notice if modified from package
+            if u["is_custom"]:
+                st.caption(f"Modified from “{PKG[u['package']]['label']}”.")
+                u["custom_label"] = st.text_input("Bar label", value=u.get("custom_label", "Custom"), key=f"label_{i}", disabled=disabled)
+            else:
+                st.caption("Matches the selected package.")
+
+        # Bar label: package label or custom
+        label = PKG[u["package"]]["label"] if not u["is_custom"] else (u.get("custom_label") or "Custom")
+
+    return {
+        "label": label,
+        "code": u["components"]["code"],
+        "src": u["components"]["src"],
+        "infra": u["components"]["infra"],
+        "fin": u["components"]["fin"],
+    }
+
+units = []
+for i in range(num_units):
+    units.append(render_unit_card(i, disabled=apartment_mode))
+    st.write("")
+
+st.divider()
+
+# --- Step 3: Household / Income & AMI lines ---
+st.header("Step 3 — Household & Income")
 with st.container(border=True):
     region_pretty_opts = [REGION_PRETTY[k] for k in REGIONS]
-    sel_regions_pretty = st.multiselect("Select region(s)", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
+    region_single = st.selectbox("Select The Region:", region_pretty_opts, index=region_pretty_opts.index("Chittenden"))
+    household_size = st.selectbox("Select Household Size:", list(range(1,9)), index=3)
+    user_income = st.number_input(
+        "Input Household Income ($20,000 - $300,000):",
+        min_value=20000, max_value=300000, step=1000, value=100000, format="%d"
+    )
+
+st.subheader("Optional: Affordability lines on the chart")
+with st.container(border=True):
+    sel_regions_pretty = st.multiselect("Regions to show on the chart", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
     n_amis = st.selectbox("How many Area Median Income (AMI) levels?", [1,2,3], index=0)
     amis = [st.selectbox(f"AMI value #{i+1}", VALID_AMIS,
                          index=VALID_AMIS.index(DEFAULT_AMIS[i] if i < len(DEFAULT_AMIS) and DEFAULT_AMIS[i] in VALID_AMIS else 150),
                          key=f"ami_{i}") for i in range(n_amis)]
 
-# ===== Chart 1 =====
+st.divider()
+
+# --- Step 4: Results ---
+st.header("Step 4 — Results")
 labels, tdc_vals, lines = [], [], {}
 if not apartment_mode and units:
     st.subheader("How did your choices affect affordability?")
-    for i,u in enumerate(units, 1):
-        label = f"Baseline {pretty(product)}" if is_baseline(u["code"],u["src"],u["infra"],u["fin"]) else f"{pretty(product)} {i}"
-        labels.append(label)
+    for u in units:
+        labels.append(u["label"])
         tdc_vals.append(compute_tdc(sf, product, u["code"], u["src"], u["infra"], u["fin"]))
     lines = affordability_lines(sel_regions_pretty, amis, pick_afford_col(int(bedrooms), product))
 
@@ -293,17 +419,9 @@ else:
 st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 
-# ===== Who Can Afford This Home? (unchanged UX text) =====
+# --- Who Can Afford This Home? ---
 st.subheader("Who Can Afford This Home?")
 with st.container(border=True):
-    region_list_pretty = [REGION_PRETTY[k] for k in REGIONS]
-    region_single = _labeled("Select The Region:", st.selectbox, options=region_list_pretty, index=region_list_pretty.index("Chittenden"))
-    household_size = _labeled("Select Household Size:", st.selectbox, options=list(range(1,9)), index=3)
-    user_income = _labeled(
-        "Input Household Income (<span style='white-space:nowrap;font-variant-numeric:tabular-nums lining-nums;font-feature-settings:\"tnum\" 1, \"lnum\" 1;'>$20,000 - $300,000</span>):",
-        st.number_input, min_value=20000, max_value=300000, step=1000, value=100000, format="%d"
-    )
-
     reg_key = PRETTY2REG[region_single]
 
     def affordability_sentence():
@@ -324,8 +442,7 @@ with st.container(border=True):
                 unsafe_allow_html=True)
     st.write("")
 
-# ===== Chart 2 + Outcome =====
-st.write("")
+# --- Chart 2 + Outcome ---
 if labels and tdc_vals and product in ("townhome","condo"):
     def household_ami_percent(region_key: str, hh_size: int, income_val: float):
         df = R[region_key]; inc_col = f"income{hh_size}"
@@ -364,7 +481,7 @@ if labels and tdc_vals and product in ("townhome","condo"):
                 you can afford <b>{len(affordable_idxs)} of {len(tdc_vals)}</b> option(s). Lowest‑cost affordable: <b>{labels[best_i]}</b>.
                 </div>""", unsafe_allow_html=True)
         else:
-            gap = min(tdc_vals) - afford_price
+            gap = min(tdc_vals) - (afford_price or 0)
             st.markdown(
                 f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
                 ❌ <b>Not yet:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
