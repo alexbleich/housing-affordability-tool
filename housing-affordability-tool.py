@@ -226,7 +226,6 @@ def draw_chart2(labels, tdc_vals, afford_price, user_income):
     if afford_price is not None:
         line_handle = ax.axhline(
             y=afford_price, linestyle="-", linewidth=2.8, color="#2E7D32",
-            label="Affordable price at your income"
         )
         ax.annotate(
             f"Your income:\n{fmt_money(user_income)}",
@@ -252,7 +251,6 @@ def draw_chart2(labels, tdc_vals, afford_price, user_income):
     if line_handle is not None:
         ax.legend(
             handles=[line_handle],
-            labels=["Affordable price at your income"],
             loc="upper right",
             title="Income level mapped to affordable purchase price"
         )
