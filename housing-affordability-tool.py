@@ -255,7 +255,7 @@ def draw_chart2(labels, tdc_vals, afford_price, user_income):
     _apply_ylim(ax, rax, ymax)
     rax.set_yticks([])  # ticks hidden by design
     rax.set_ylabel("Income Req. to Purchase")
-    rax.yaxis.set_label_coords(1.18, 0.5)  # push right so it sits beyond the green annotation
+    rax.yaxis.set_label_coords(1.08, 0.5)  # push right so it sits beyond the green annotation
 
     # Titles / axis labels (no X label)
     ax.set_ylabel("Total Development Cost (TDC)")
