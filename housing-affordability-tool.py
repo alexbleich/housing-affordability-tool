@@ -415,7 +415,8 @@ for i in range(num_units):
 st.divider()
 
 # ===== Chart 1 Controls (always on, above chart) =====
-st.subheader("Area Median Income (AMI) lines for Chart 1")
+st.header("Step 3 — Compare Costs with Affordability)
+st.subheader("Affordability Thresholds")
 with st.container(border=True):
     n_amis = st.selectbox("How many Area Median Income (AMI) levels?", [1,2,3], index=0)
     def default_ami_for_idx(i):
@@ -425,14 +426,14 @@ with st.container(border=True):
     amis = []
     for i in range(n_amis):
         ami_val = st.selectbox(
-            f"Area Median Income (AMI) value #{i+1}",
+            f"AMI value #{i+1}",
             VALID_AMIS,
             index=VALID_AMIS.index(default_ami_for_idx(i)) if default_ami_for_idx(i) in VALID_AMIS else VALID_AMIS.index(100),
             key=f"ami_{i}"
         )
         amis.append(ami_val)
     region_pretty_opts = [REGION_PRETTY[k] for k in REGIONS]
-    sel_regions_pretty = st.multiselect("Regions to show on Chart 1", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
+    sel_regions_pretty = st.multiselect("Select region(s)", region_pretty_opts, default=[REGION_PRETTY["Chittenden"]])
 
 st.divider()
 
@@ -456,8 +457,7 @@ st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchas
 st.divider()
 
 # ===== Step 3 — Specify household context =====
-st.header("Step 3 — Specify household context")
-
+st.header("Step 4 — Specify Household Context")
 st.subheader("Household Settings")
 st.caption("Select region, household size, and income to assess affordability for local households.")
 with st.container(border=True):
