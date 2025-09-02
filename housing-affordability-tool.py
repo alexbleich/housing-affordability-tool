@@ -249,13 +249,14 @@ def draw_chart2(labels, tdc_vals, afford_price, user_income):
             bbox=dict(facecolor="white", alpha=0.0, edgecolor="none", pad=0),
         )
 
-    # Apply consistent limits; create right axis and push its label to the far right
+    # Apply consistent limits
     _apply_ylim(ax, None, ymax)
     rax = ax.twinx()
     _apply_ylim(ax, rax, ymax)
-    rax.set_yticks([])  # ticks hidden by design
+
+    # Right axis now mirrors cost axis but labeled as required income
     rax.set_ylabel("Income Req. to Purchase")
-    rax.yaxis.set_label_coords(1.12, 0.5)  # push right so it sits beyond the green annotation
+    rax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
 
     # Titles / axis labels (no X label)
     ax.set_ylabel("Total Development Cost (TDC)")
