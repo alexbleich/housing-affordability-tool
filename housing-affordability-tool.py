@@ -464,11 +464,11 @@ if not apartment_mode and units:
         xv = float(np.clip(ami_percent, x[0], x[-1]))
         return float(np.interp(xv, x, y))
 
-    price_to_income = make_price_to_income_mapper(reg_key, int(household_size), int(bedrooms))
-    income_to_price = make_income_to_price_mapper(reg_key, int(household_size), int(bedrooms))
+        price_to_income = make_price_to_income_mapper(reg_key, int(household_size), int(bedrooms))
+        income_to_price = make_income_to_price_mapper(reg_key, int(household_size), int(bedrooms))
 
-    afford_price = income_to_price(float(user_income)) if income_to_price is not None else None
-    draw_chart2(labels, tdc_vals, afford_price, price_to_income)
+        afford_price = income_to_price(float(user_income)) if income_to_price is not None else None
+        draw_chart2(labels, tdc_vals, afford_price, price_to_income)
 
     cheapest_price = min(tdc_vals) if tdc_vals else None
     required_income = price_to_income(cheapest_price) if (cheapest_price is not None and price_to_income is not None) else None
