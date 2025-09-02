@@ -492,26 +492,26 @@ if not apartment_mode and units:
     draw_chart2(labels, tdc_vals, afford_price, price_to_income)
 
     if afford_price is not None:
-    affordable_idxs = [i for i, v in enumerate(tdc_vals) if v <= afford_price]
+        affordable_idxs = [i for i, v in enumerate(tdc_vals) if v <= afford_price]
 
-    if affordable_idxs:
-        st.markdown(
-            f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
-            ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
-            you can afford <b>{len(affordable_idxs)} of {len(tdc_vals)}</b> option(s).
-            </div>""",
-            unsafe_allow_html=True
-        )
-    else:
-        cheapest = min(tdc_vals) if tdc_vals else None
-        gap = max(0.0, (cheapest or 0.0) - (afford_price or 0.0))
-        st.markdown(
-            f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
-            ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
-            none of the options are affordable. Shortfall compared to your affordability threshold: <b>{fmt_money(gap)}</b>.
-            </div>""",
-            unsafe_allow_html=True
-        )
+        if affordable_idxs:
+            st.markdown(
+                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
+                ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                you can afford <b>{len(affordable_idxs)} of {len(tdc_vals)}</b> option(s).
+                </div>""",
+                unsafe_allow_html=True
+            )
+        else:
+            cheapest = min(tdc_vals) if tdc_vals else None
+            gap = max(0.0, (cheapest or 0.0) - (afford_price or 0.0))
+            st.markdown(
+                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
+                ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                none of the options are affordable. Shortfall compared to your affordability threshold: <b>{fmt_money(gap)}</b>.
+                </div>""",
+                unsafe_allow_html=True
+            )
 
 st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
