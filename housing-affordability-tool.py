@@ -33,20 +33,10 @@ DEFAULT_AMIS = [150, 120, 100]
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
 
-# Policy packages
 PKG = {
-    "baseline": {
-        "label": "Baseline",
-        "code": "vt_energy_code", "src": "natural_gas", "infra": "no", "fin": "average",
-    },
-    "top": {
-        "label": "Top-of-the-Line",
-        "code": "passive_house", "src": "geothermal", "infra": "yes", "fin": "above_average",
-    },
-    "below": {
-        "label": "Below Baseline",
-        "code": "base_me_nh_code", "src": "natural_gas", "infra": "no", "fin": "below_average",
-    },
+    "baseline": {"label": "Baseline", "code": "vt_energy_code", "src": "natural_gas", "infra": "no", "fin": "average"},
+    "top": {"label": "Top-of-the-Line", "code": "passive_house", "src": "geothermal", "infra": "yes", "fin": "above_average"},
+    "below": {"label": "Below Baseline", "code": "base_me_nh_code", "src": "natural_gas", "infra": "no", "fin": "below_average"},
 }
 
 # ===== Data Loading =====
@@ -147,7 +137,7 @@ def affordability_lines(region_pretty_list, amis, col):
         df = R[PRETTY2REG[rp]]
         if col not in df.columns: continue
         for ami in sorted(amis):
-            ami_capped = min(ami, 150)  # enforce cap
+            ami_capped = min(ami, 150)
             m = df[AMI_COL].eq(ami_capped/100.0)
             if m.any():
                 lines[f"{ami_capped}% AMI - {rp}"] = float(pd.to_numeric(df.loc[m, col], errors="coerce").iloc[0])
@@ -165,6 +155,24 @@ def nearest_ami_row(df: pd.DataFrame, hh_col: str, income: float) -> pd.Series:
     diffs = (inc - income).abs()
     idx = diffs[diffs.eq(diffs.min())].index[-1]
     return pd.Series({"income": float(inc.loc[idx]), "ami_frac": float(ami.loc[idx])}, name=idx)
+
+def make_price_to_income_mapper(region_key: str, hh_size: int, bed_n: int):
+    df = R[region_key]
+    inc_col = f"income{hh_size}"
+    buy_col = f"buy{bed_n}"
+    if not {AMI_COL, inc_col, buy_col}.issubset(df.columns):
+        return None
+    sub = df[[buy_col, inc_col]].apply(pd.to_numeric, errors="coerce").dropna()
+    if sub.empty:
+        return None
+    sub = sub.sort_values(buy_col)
+    x_price = sub[buy_col].to_numpy(dtype=float)
+    y_income = sub[inc_col].to_numpy(dtype=float)
+    def price_to_income(price: float) -> float:
+        if price is None or not np.isfinite(price): return np.nan
+        p = float(np.clip(price, x_price[0], x_price[-1]))
+        return float(np.interp(p, x_price, y_income))
+    return price_to_income
 
 # ===== Plot Utilities =====
 def _bar_with_values(ax, labels, values, pad_ratio):
@@ -185,17 +193,13 @@ def draw_chart1(labels, tdc_vals, lines):
     top_bar = max(tdc_vals) if tdc_vals else 1.0
     top_line = max(lines.values()) if lines else 0.0
     ymax = 1.2 * max(top_bar, top_line, 1.0)
-
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.02)
-
     if lines:
         for i, (lab, val) in enumerate(sorted(lines.items(), key=lambda kv: kv[0])):
             ax.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
-
     _apply_ylim(ax, None, ymax)
     ax2 = ax.twinx()
     _apply_ylim(ax, ax2, ymax)
-
     if lines:
         ordered = [k for k, _ in sorted(lines.items(), key=lambda kv: kv[0])]
         vals = [lines[k] for k in ordered]
@@ -204,62 +208,40 @@ def draw_chart1(labels, tdc_vals, lines):
         ax.legend(loc="upper right")
     else:
         ax2.set_yticks([])
-
     ax.set_ylabel("Total Development Cost (TDC)")
     ax.set_xlabel("")
     ax2.set_ylabel("Max. Affordable Purchase Price (% AMI)")
     ax.set_title("Total Development Cost vs. What Households Can Afford")
-
     plt.xticks(rotation=0)
     fig.tight_layout()
     st.pyplot(fig)
 
-def draw_chart2(labels, tdc_vals, afford_price, user_income):
-    """
-    Bars = TDC per unit. Single green line = affordable purchase price at the selected income/household.
-    - Legend shows the green line with the exact text required (no auto-named '_child*').
-    - Right Y-axis label is pushed far right so it doesn't collide with the green annotation.
-    - Top of chart = 1.2 × max(top bar, affordability line).
-    """
+def draw_chart2(labels, tdc_vals, afford_price, price_to_income):
     fig, ax = plt.subplots(figsize=(12, 6))
-
-    # Y max rule: include bars and the affordability line
     top_bar = max(tdc_vals) if tdc_vals else 1.0
     top_line = float(afford_price) if afford_price is not None else 0.0
     ymax = 1.2 * max(top_bar, top_line, 1.0)
-
-    # Bars + value labels
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.025)
-
-    # Affordability line with explicit label for the legend
     line_handle = None
     if afford_price is not None:
-        line_handle = ax.axhline(
-            y=float(afford_price),
-            linestyle="-",
-            linewidth=2.8,
-            color="#2E7D32",
-            label="Income level mapped to affordable purchase price",  # <- legend text
-        )
-
-    # Apply consistent limits
+        line_handle = ax.axhline(y=float(afford_price), linestyle="-", linewidth=2.8, color="#2E7D32",
+                                 label="Income level mapped to affordable purchase price")
     _apply_ylim(ax, None, ymax)
     rax = ax.twinx()
     _apply_ylim(ax, rax, ymax)
-
-    # Right axis now mirrors cost axis but labeled as required income
-    rax.set_ylabel("Income Req. to Purchase")
-    rax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
-
-    # Titles / axis labels (no X label)
     ax.set_ylabel("Total Development Cost (TDC)")
     ax.set_xlabel("")
     ax.set_title("Purchase Ability by Income, Household Size, and Region")
-
-    # Legend: show only the green line with the exact label (no '_child*')
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
+    if price_to_income is not None:
+        left_ticks = ax.get_yticks()
+        rax.set_yticks(left_ticks)
+        rax.set_yticklabels([fmt_money(price_to_income(t)) for t in left_ticks])
+    else:
+        rax.set_yticks([])
+    rax.set_ylabel("Income Req. to Purchase")
     if line_handle is not None:
         ax.legend(handles=[line_handle], loc="upper right", frameon=True)
-
     plt.xticks(rotation=0)
     fig.tight_layout()
     st.pyplot(fig)
@@ -318,7 +300,6 @@ product = st.radio("What kind of housing are we talking about?",
                    ["townhome","condo","apartment"],
                    format_func=pretty, horizontal=True, key="global_product")
 apartment_mode = (product == "apartment")
-
 if not apartment_mode:
     br_opts = options("bedrooms", parent=product) or ["2"]
     bedrooms = st.selectbox("Number of bedrooms",
@@ -357,7 +338,6 @@ def render_unit_card(i: int, disabled: bool = False):
             )
             if u["is_custom"] and not disabled:
                 st.caption(f"Modified from “{PKG[u['package']]['label']}”. Click “Reset to package” to change package.")
-
         with cols[1]:
             c1, c2 = st.columns([1,1])
             with c1:
@@ -366,16 +346,13 @@ def render_unit_card(i: int, disabled: bool = False):
             with c2:
                 if u["is_custom"] and st.button("Reset to package", key=f"reset_{i}", disabled=disabled):
                     _apply_package(i, u["package"]); st.rerun()
-
         if not (u["is_custom"] or disabled) and pkg_choice != u["package"]:
             _apply_package(i, pkg_choice)
-
         with st.expander("Advanced: adjust components", expanded=False):
             opt_code  = options("energy_code", DEFAULT_PARENT) or ["vt_energy_code"]
             opt_src   = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
             opt_infra = options("infrastructure", DEFAULT_PARENT) or ["no","yes"]
             opt_fin   = options("finish_quality", DEFAULT_PARENT) or ["average","above_average","below_average"]
-
             code  = st.selectbox("Energy code standard", opt_code,
                                  index=(opt_code.index(u["components"]["code"]) if u["components"]["code"] in opt_code else 0),
                                  format_func=pretty, key=f"code_{i}", disabled=disabled)
@@ -388,16 +365,12 @@ def render_unit_card(i: int, disabled: bool = False):
             fin   = st.selectbox("Finish quality", opt_fin,
                                  index=(opt_fin.index(u["components"]["fin"]) if u["components"]["fin"] in opt_fin else 0),
                                  format_func=pretty, key=f"fin_{i}", disabled=disabled)
-
             for field, val in [("code", code), ("src", src), ("infra", infra), ("fin", fin)]:
                 if val != u["components"][field]:
                     _update_component(i, field, val)
-
             if u["is_custom"]:
                 u["custom_label"] = st.text_input("Bar label", value=u.get("custom_label", "Custom"), key=f"label_{i}", disabled=disabled)
-
         label = PKG[u["package"]]["label"] if not u["is_custom"] else (u.get("custom_label") or "Custom")
-
     return {"label": label, "code": u["components"]["code"], "src": u["components"]["src"],
             "infra": u["components"]["infra"], "fin": u["components"]["fin"]}
 
@@ -408,7 +381,7 @@ for i in range(num_units):
 
 st.divider()
 
-# ===== Chart 1 Controls (always on, above chart) =====
+# ===== Step 3 — Compare Costs with Affordability =====
 st.header("Step 3 — Compare Costs with Affordability")
 st.subheader("Affordability Thresholds")
 with st.container(border=True):
@@ -439,13 +412,13 @@ if not apartment_mode and units:
     lines = affordability_lines(sel_regions_pretty, amis, pick_afford_col(int(bedrooms), product))
     draw_chart1(labels, tdc_vals, lines)
 elif apartment_mode:
-    st.info("Select Townhome or Condo to run the for‑sale model. Apartment model (rent) coming soon.")
+    st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
 else:
     st.info("No valid unit data provided.")
 
 st.divider()
 
-# ===== Step 3 — Specify household context =====
+# ===== Step 4 — Specify Household Context =====
 st.header("Step 4 — Specify Household Context")
 st.subheader("Household Settings")
 st.caption("Select region, household size, and income to assess affordability for local households.")
@@ -459,7 +432,6 @@ with st.container(border=True):
 # ===== Chart 2 =====
 if not apartment_mode and units:
     st.subheader("What These Costs Mean for Your Constituents")
-
     reg_key = PRETTY2REG[region_single]
 
     def household_ami_percent(region_key: str, hh_size: int, income_val: float):
@@ -486,31 +458,26 @@ if not apartment_mode and units:
 
     ami_pct = household_ami_percent(reg_key, int(household_size), int(user_income))
     afford_price = affordability_at_percent(reg_key, int(bedrooms), ami_pct) if ami_pct is not None else None
+    price_to_income = make_price_to_income_mapper(reg_key, int(household_size), int(bedrooms))
 
-    draw_chart2(labels, tdc_vals, afford_price, int(user_income))
+    draw_chart2(labels, tdc_vals, afford_price, price_to_income)
 
     if afford_price is not None:
         affordable_idxs = [i for i, v in enumerate(tdc_vals) if v <= afford_price]
-    
         if affordable_idxs:
             st.markdown(
-                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;
-                       background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
-                    ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) 
-                    and household size (<b>{household_size}</b>), 
-                    you can afford <b>{len(affordable_idxs)} of {len(tdc_vals)}</b> option(s).
+                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
+                ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                you can afford <b>{len(affordable_idxs)} of {len(tdc_vals)}</b> option(s).
                 </div>""",
                 unsafe_allow_html=True
             )
         else:
-            gap = min(tdc_vals) - afford_price
+            gap = min(tdc_vals) - (afford_price or 0)
             st.markdown(
-                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;
-                       background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
-                    ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) 
-                    and household size (<b>{household_size}</b>), 
-                    none of the options are affordable. 
-                    Shortfall compared to your affordability threshold: <b>{fmt_money(gap)}</b>.
+                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
+                ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                none of the options are affordable. Shortfall compared to your affordability threshold: <b>{fmt_money(gap)}</b>.
                 </div>""",
                 unsafe_allow_html=True
             )
