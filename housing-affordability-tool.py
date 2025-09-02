@@ -143,29 +143,24 @@ def affordability_lines(region_pretty_list, amis, col):
                 lines[f"{ami_capped}% AMI - {rp}"] = float(pd.to_numeric(df.loc[m, col], errors="coerce").iloc[0])
     return lines
 
-def make_price_to_income_mapper(region_key: str, hh_size: int, bed_n: int):
+def make_income_to_price_mapper(region_key: str, hh_size: int, bed_n: int):
+    """Map household income → max affordable purchase price, capped at the table's max (150% AMI)."""
     df = R[region_key]
     inc_col = f"income{hh_size}"
     buy_col = f"buy{bed_n}"
-    if not {AMI_COL, inc_col, buy_col}.issubset(df.columns):
+    if not {inc_col, buy_col}.issubset(df.columns):
         return None
-    sub = df[[buy_col, inc_col]].apply(pd.to_numeric, errors="coerce").dropna()
+    sub = df[[inc_col, buy_col]].apply(pd.to_numeric, errors="coerce").dropna().sort_values(inc_col)
     if sub.empty:
         return None
-    sub = sub.sort_values(buy_col)
-    x = sub[buy_col].to_numpy(dtype=float)
-    y = sub[inc_col].to_numpy(dtype=float)
-    if len(x) < 2:
-        return (lambda price: float(y[0]))
-    slope_lo = (y[1] - y[0]) / (x[1] - x[0])
-    slope_hi = (y[-1] - y[-2]) / (x[-1] - x[-2])
-    def price_to_income(price: float) -> float:
-        if price is None or not np.isfinite(price): return np.nan
-        p = float(price)
-        if p <= x[0]:  return float(y[0] + slope_lo * (p - x[0]))
-        if p >= x[-1]: return float(y[-1] + slope_hi * (p - x[-1]))
-        return float(np.interp(p, x, y))
-    return price_to_income
+    x_inc = sub[inc_col].to_numpy(dtype=float)     # income
+    y_buy = sub[buy_col].to_numpy(dtype=float)     # price
+    def income_to_price(income: float) -> float:
+        if income is None or not np.isfinite(income):
+            return np.nan
+        inc = float(np.clip(income, x_inc[0], x_inc[-1]))  # cap above 150% AMI
+        return float(np.interp(inc, x_inc, y_buy))
+    return income_to_price
 
 # ===== Plot Utilities =====
 def _bar_with_values(ax, labels, values, pad_ratio):
@@ -213,19 +208,18 @@ def draw_chart2(labels, tdc_vals, afford_price, price_to_income):
     fig, ax = plt.subplots(figsize=(12, 6))
 
     # Scale so bars + affordability line both fit
-    top_bar = max(tdc_vals) if tdc_vals else 1.0
-    top_line = float(afford_price) if afford_price else 0.0
+    top_bar  = max(tdc_vals) if tdc_vals else 1.0
+    top_line = float(afford_price) if afford_price is not None else 0.0
     ymax = 1.2 * max(top_bar, top_line, 1.0)
 
-    # Draw bars
+    # Bars
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.025)
 
-    # Affordability line
+    # Green affordability line based on *income -> price* mapping
     line_handle = None
-    if afford_price:
+    if afford_price is not None and np.isfinite(afford_price):
         line_handle = ax.axhline(
-            y=float(afford_price),
-            linestyle="-", linewidth=2.8, color="#2E7D32",
+            y=float(afford_price), linestyle="-", linewidth=2.8, color="#2E7D32",
             label="Income level mapped to affordable purchase price"
         )
 
@@ -234,34 +228,31 @@ def draw_chart2(labels, tdc_vals, afford_price, price_to_income):
     rax = ax.twinx()
     _apply_ylim(ax, rax, ymax)
 
-    # Left axis formatting
+    # Labels/titles
     ax.set_ylabel("Total Development Cost (TDC)")
     ax.set_xlabel("")
     ax.set_title("Purchase Ability by Income, Household Size, and Region")
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
 
-    # Right axis mapping
-    if price_to_income:
+    # Right axis: map each left tick (inside bounds) from TDC -> required income
+    if price_to_income is not None:
         left_ticks = ax.get_yticks()
         left_min, left_max = ax.get_ylim()
 
-        # Filter ticks: keep only those strictly inside range (no top)
-        right_ticks = [t for t in left_ticks if left_min < t < left_max]
-
-        # Map each TDC tick to required income
-        income_labels = []
-        for t in right_ticks:
-            inc = price_to_income(t)
-            income_labels.append(fmt_money(inc) if np.isfinite(inc) else "—")
+        # Keep only interior ticks (no bottom 0, no top ymax)
+        right_ticks = [t for t in left_ticks if (t > left_min) and (t < left_max)]
 
         rax.set_yticks(right_ticks)
-        rax.set_yticklabels(income_labels)
+        rax.set_yticklabels([
+            fmt_money(price_to_income(t)) if np.isfinite(price_to_income(t)) else "—"
+            for t in right_ticks
+        ])
     else:
         rax.set_yticks([])
 
     rax.set_ylabel("Income Req. to Purchase")
 
-    if line_handle:
+    if line_handle is not None:
         ax.legend(handles=[line_handle], loc="upper right", frameon=True)
 
     plt.xticks(rotation=0)
@@ -473,10 +464,10 @@ if not apartment_mode and units:
         xv = float(np.clip(ami_percent, x[0], x[-1]))
         return float(np.interp(xv, x, y))
 
-    ami_pct = household_ami_percent(reg_key, int(household_size), int(user_income))
-    afford_price = affordability_at_percent(reg_key, int(bedrooms), ami_pct) if ami_pct is not None else None
     price_to_income = make_price_to_income_mapper(reg_key, int(household_size), int(bedrooms))
+    income_to_price = make_income_to_price_mapper(reg_key, int(household_size), int(bedrooms))
 
+    afford_price = income_to_price(float(user_income)) if income_to_price is not None else None
     draw_chart2(labels, tdc_vals, afford_price, price_to_income)
 
     cheapest_price = min(tdc_vals) if tdc_vals else None
