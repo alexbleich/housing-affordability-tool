@@ -241,13 +241,6 @@ def draw_chart2(labels, tdc_vals, afford_price, user_income):
             color="#2E7D32",
             label="Income level mapped to affordable purchase price",  # <- legend text
         )
-        ax.annotate(
-            f"Your income:\n{fmt_money(user_income)}",
-            xy=(1.0, float(afford_price)), xycoords=("axes fraction", "data"),
-            xytext=(10, 0), textcoords="offset points",
-            ha="left", va="center", fontsize=10, color="#2E7D32", multialignment="center",
-            bbox=dict(facecolor="white", alpha=0.0, edgecolor="none", pad=0),
-        )
 
     # Apply consistent limits
     _apply_ylim(ax, None, ymax)
