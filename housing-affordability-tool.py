@@ -246,23 +246,9 @@ def draw_chart2(labels, tdc_vals, afford_price, price_to_income):
 
     if price_to_income is not None:
         left_ticks = ax.get_yticks()
-        mapped = [price_to_income(t) for t in left_ticks]
-
-        labels = []
-        last_shown = None
-        for m in mapped:
-            if m is None or not np.isfinite(m):
-                labels.append("")
-                continue
-            # hide nearly-duplicate labels (e.g., many ticks clamped to the max income)
-            if last_shown is not None and abs(m - last_shown) < 1500:
-                labels.append("")
-            else:
-                labels.append(fmt_money(m))
-                last_shown = m
-
-        rax.set_yticks(left_ticks)
-        rax.set_yticklabels(labels)
+        ticks = left_ticks[:-1]  # drop the very top tick on the right axis
+        rax.set_yticks(ticks)
+        rax.set_yticklabels([fmt_money(price_to_income(t)) for t in ticks])
     else:
         rax.set_yticks([])
 
@@ -504,14 +490,26 @@ if not apartment_mode and units:
             )
         else:
             cheapest = min(tdc_vals) if tdc_vals else None
-            gap = max(0.0, (cheapest or 0.0) - (afford_price or 0.0))
-            st.markdown(
-                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
-                ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
-                none of the options are affordable. Shortfall compared to your affordability threshold: <b>{fmt_money(gap)}</b>.
-                </div>""",
-                unsafe_allow_html=True
-            )
+            required_income = price_to_income(cheapest) if (cheapest is not None and price_to_income is not None) else None
+            required_income = float(required_income) if required_income is not None and np.isfinite(required_income) else None
+
+            if required_income is not None:
+                st.markdown(
+                    f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
+                    ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                    none of the options are affordable. A household of this size would need to make at least <b>{fmt_money(required_income)}</b> to afford the cheapest option.
+                    </div>""",
+                    unsafe_allow_html=True
+                )
+            else:
+                gap = max(0.0, (cheapest or 0.0) - (afford_price or 0.0))
+                st.markdown(
+                    f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
+                    ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                    none of the options are affordable. Shortfall compared to your affordability threshold: <b>{fmt_money(gap)}</b>.
+                    </div>""",
+                    unsafe_allow_html=True
+                )
 
 st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
