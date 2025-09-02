@@ -143,8 +143,33 @@ def affordability_lines(region_pretty_list, amis, col):
                 lines[f"{ami_capped}% AMI - {rp}"] = float(pd.to_numeric(df.loc[m, col], errors="coerce").iloc[0])
     return lines
 
+def make_price_to_income_mapper(region_key: str, hh_size: int, bed_n: int):
+    df = R[region_key]
+    inc_col = f"income{hh_size}"
+    buy_col = f"buy{bed_n}"
+    if not {AMI_COL, inc_col, buy_col}.issubset(df.columns):
+        return None
+    sub = df[[buy_col, inc_col]].apply(pd.to_numeric, errors="coerce").dropna()
+    if sub.empty:
+        return None
+    sub = sub.sort_values(buy_col)
+    x = sub[buy_col].to_numpy(dtype=float)
+    y = sub[inc_col].to_numpy(dtype=float)
+    if len(x) < 2:
+        return (lambda price: float(y[0]))
+    slope_lo = (y[1] - y[0]) / (x[1] - x[0])
+    slope_hi = (y[-1] - y[-2]) / (x[-1] - x[-2])
+    def price_to_income(price: float) -> float:
+        if price is None or not np.isfinite(price): return np.nan
+        p = float(price)
+        if p <= x[0]:  return float(y[0] + slope_lo * (p - x[0]))
+        if p >= x[-1]: return float(y[-1] + slope_hi * (p - x[-1]))
+        return float(np.interp(p, x, y))
+    return price_to_income
+
+# NEW: income -> price, used for the green line in Chart 2
 def make_income_to_price_mapper(region_key: str, hh_size: int, bed_n: int):
-    """Map household income → max affordable purchase price, capped at the table's max (150% AMI)."""
+    """Map household income -> max affordable purchase price (capped to table range)."""
     df = R[region_key]
     inc_col = f"income{hh_size}"
     buy_col = f"buy{bed_n}"
@@ -153,12 +178,11 @@ def make_income_to_price_mapper(region_key: str, hh_size: int, bed_n: int):
     sub = df[[inc_col, buy_col]].apply(pd.to_numeric, errors="coerce").dropna().sort_values(inc_col)
     if sub.empty:
         return None
-    x_inc = sub[inc_col].to_numpy(dtype=float)     # income
-    y_buy = sub[buy_col].to_numpy(dtype=float)     # price
+    x_inc = sub[inc_col].to_numpy(dtype=float)
+    y_buy = sub[buy_col].to_numpy(dtype=float)
     def income_to_price(income: float) -> float:
-        if income is None or not np.isfinite(income):
-            return np.nan
-        inc = float(np.clip(income, x_inc[0], x_inc[-1]))  # cap above 150% AMI
+        if income is None or not np.isfinite(income): return np.nan
+        inc = float(np.clip(income, x_inc[0], x_inc[-1]))  # cap above 150% AMI equivalent
         return float(np.interp(inc, x_inc, y_buy))
     return income_to_price
 
@@ -204,18 +228,15 @@ def draw_chart1(labels, tdc_vals, lines):
     fig.tight_layout()
     st.pyplot(fig)
 
+# REPLACED: Chart 2 with corrected right-axis mapping and green line from income->price
 def draw_chart2(labels, tdc_vals, afford_price, price_to_income):
     fig, ax = plt.subplots(figsize=(12, 6))
-
-    # Scale so bars + affordability line both fit
     top_bar  = max(tdc_vals) if tdc_vals else 1.0
-    top_line = float(afford_price) if afford_price is not None else 0.0
+    top_line = float(afford_price) if (afford_price is not None and np.isfinite(afford_price)) else 0.0
     ymax = 1.2 * max(top_bar, top_line, 1.0)
 
-    # Bars
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.025)
 
-    # Green affordability line based on *income -> price* mapping
     line_handle = None
     if afford_price is not None and np.isfinite(afford_price):
         line_handle = ax.axhline(
@@ -223,25 +244,20 @@ def draw_chart2(labels, tdc_vals, afford_price, price_to_income):
             label="Income level mapped to affordable purchase price"
         )
 
-    # Sync axes
     _apply_ylim(ax, None, ymax)
     rax = ax.twinx()
     _apply_ylim(ax, rax, ymax)
 
-    # Labels/titles
     ax.set_ylabel("Total Development Cost (TDC)")
     ax.set_xlabel("")
     ax.set_title("Purchase Ability by Income, Household Size, and Region")
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
 
-    # Right axis: map each left tick (inside bounds) from TDC -> required income
     if price_to_income is not None:
         left_ticks = ax.get_yticks()
         left_min, left_max = ax.get_ylim()
-
-        # Keep only interior ticks (no bottom 0, no top ymax)
+        # keep only interior ticks (no 0, no top ymax) to avoid empty/duplicate labels
         right_ticks = [t for t in left_ticks if (t > left_min) and (t < left_max)]
-
         rax.set_yticks(right_ticks)
         rax.set_yticklabels([
             fmt_money(price_to_income(t)) if np.isfinite(price_to_income(t)) else "—"
@@ -442,55 +458,37 @@ if not apartment_mode and units:
     st.subheader("What These Costs Mean for Your Constituents")
     reg_key = PRETTY2REG[region_single]
 
-    def household_ami_percent(region_key: str, hh_size: int, income_val: float):
-        df = R[region_key]; inc_col = f"income{hh_size}"
-        if not {AMI_COL, inc_col}.issubset(df.columns): return None
-        sub = df[[inc_col, AMI_COL]].dropna().sort_values(inc_col)
-        if sub.empty: return None
-        x = sub[inc_col].astype(float).to_numpy()
-        y = (sub[AMI_COL]*100.0).astype(float).to_numpy()
-        if len(x) == 1: return float(y[0])
-        xv = float(np.clip(income_val, x[0], x[-1]))
-        return float(np.interp(xv, x, y))
+    # Use the SAME VHFA table in both directions
+    price_to_income = make_price_to_income_mapper(reg_key, int(household_size), int(bedrooms))
+    income_to_price = make_income_to_price_mapper(reg_key, int(household_size), int(bedrooms))
 
-    def affordability_at_percent(region_key: str, bed_n: int, ami_percent: float):
-        df = R[region_key]; col = f"buy{bed_n}"
-        if not {AMI_COL, col}.issubset(df.columns): return None
-        sub = df[[AMI_COL, col]].dropna().sort_values(AMI_COL)
-        if sub.empty: return None
-        x = (sub[AMI_COL]*100.0).astype(float).to_numpy()
-        y = sub[col].astype(float).to_numpy()
-        if len(x) == 1: return float(y[0])
-        xv = float(np.clip(ami_percent, x[0], x[-1]))
-        return float(np.interp(xv, x, y))
+    # Green line: your income -> affordable price (capped to table max)
+    afford_price = income_to_price(float(user_income)) if income_to_price is not None else None
 
-        price_to_income = make_price_to_income_mapper(reg_key, int(household_size), int(bedrooms))
-        income_to_price = make_income_to_price_mapper(reg_key, int(household_size), int(bedrooms))
+    draw_chart2(labels, tdc_vals, afford_price, price_to_income)
 
-        afford_price = income_to_price(float(user_income)) if income_to_price is not None else None
-        draw_chart2(labels, tdc_vals, afford_price, price_to_income)
+    # Messaging logic (unchanged): compare your income to required income for cheapest option
+    cheapest_price = min(tdc_vals) if tdc_vals else None
+    required_income = price_to_income(cheapest_price) if (cheapest_price is not None and price_to_income is not None) else None
+    ok = (required_income is not None) and np.isfinite(required_income) and (float(user_income) >= float(required_income))
 
-        cheapest_price = min(tdc_vals) if tdc_vals else None
-        required_income = price_to_income(cheapest_price) if (cheapest_price is not None and price_to_income is not None) else None
-        ok = (required_income is not None) and np.isfinite(required_income) and (float(user_income) >= float(required_income))
-
-        if ok:
-            st.markdown(
-                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
-                ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
-                you can afford <b>the cheapest option</b>.
-                </div>""",
-                unsafe_allow_html=True
-            )
-        else:
-            need_text = fmt_money(required_income) if (required_income is not None and np.isfinite(required_income)) else "—"
-            st.markdown(
-                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
-                ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
-                none of the options are affordable. A household of this size would need to make at least <b>{need_text}</b> to afford the cheapest option.
-                </div>""",
-                unsafe_allow_html=True
-            )
+    if ok:
+        st.markdown(
+            f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
+            ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+            you can afford <b>the cheapest option</b>.
+            </div>""",
+            unsafe_allow_html=True
+        )
+    else:
+        need_text = fmt_money(required_income) if (required_income is not None and np.isfinite(required_income)) else "—"
+        st.markdown(
+            f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
+            ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+            none of the options are affordable. A household of this size would need to make at least <b>{need_text}</b> to afford the cheapest option.
+            </div>""",
+            unsafe_allow_html=True
+        )
 
 st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
