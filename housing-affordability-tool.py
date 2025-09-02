@@ -470,27 +470,27 @@ if not apartment_mode and units:
         afford_price = income_to_price(float(user_income)) if income_to_price is not None else None
         draw_chart2(labels, tdc_vals, afford_price, price_to_income)
 
-    cheapest_price = min(tdc_vals) if tdc_vals else None
-    required_income = price_to_income(cheapest_price) if (cheapest_price is not None and price_to_income is not None) else None
-    ok = (required_income is not None) and np.isfinite(required_income) and (float(user_income) >= float(required_income))
+        cheapest_price = min(tdc_vals) if tdc_vals else None
+        required_income = price_to_income(cheapest_price) if (cheapest_price is not None and price_to_income is not None) else None
+        ok = (required_income is not None) and np.isfinite(required_income) and (float(user_income) >= float(required_income))
 
-    if ok:
-        st.markdown(
-            f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
-            ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
-            you can afford <b>the cheapest option</b>.
-            </div>""",
-            unsafe_allow_html=True
-        )
-    else:
-        need_text = fmt_money(required_income) if (required_income is not None and np.isfinite(required_income)) else "—"
-        st.markdown(
-            f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
-            ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
-            none of the options are affordable. A household of this size would need to make at least <b>{need_text}</b> to afford the cheapest option.
-            </div>""",
-            unsafe_allow_html=True
-        )
+        if ok:
+            st.markdown(
+                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
+                ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                you can afford <b>the cheapest option</b>.
+                </div>""",
+                unsafe_allow_html=True
+            )
+        else:
+            need_text = fmt_money(required_income) if (required_income is not None and np.isfinite(required_income)) else "—"
+            st.markdown(
+                f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
+                ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                none of the options are affordable. A household of this size would need to make at least <b>{need_text}</b> to afford the cheapest option.
+                </div>""",
+                unsafe_allow_html=True
+            )
 
 st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
