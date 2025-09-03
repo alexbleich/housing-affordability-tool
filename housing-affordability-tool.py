@@ -517,6 +517,21 @@ else:
     st.info("No valid unit data provided.")
 st.divider()
 
+with st.expander("Cost breakdown (debug)", expanded=False):
+    if not apartment_mode and units:
+        for idx, u in enumerate(units):
+            comps = u  # label, code, src, infra, fin
+            parents = [product, "default"]
+            es_psf, es_pu, es_fx = _sum_overlay("energy_source", comps["src"], parents)
+            in_psf, in_pu, in_fx = _sum_overlay("infrastructure", comps["infra"], parents)
+
+            st.write(f"**{comps['label']}**")
+            st.write({
+                "core_psf":        baseline_per_sf() * (mf_factor(product) + (one_val('energy_code', comps['code']) + one_val('finish_quality', comps['fin']))/100.0),
+                "energy_source":   {"per_sf": es_psf, "per_unit": es_pu, "fixed": es_fx},
+                "infrastructure":  {"per_sf": in_psf, "per_unit": in_pu, "fixed": in_fx},
+            })
+
 # ===== Step 4 — Specify Household Context =====
 st.header("Step 4 — Specify Household Context")
 st.subheader("Household Settings")
