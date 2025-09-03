@@ -31,7 +31,7 @@ PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 VALID_AMIS = [30] + list(range(50, 155, 5))
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
-AFFORD_EPS = 0.5
+AFFORD_EPS = 0.5  # small cushion so exact-equals count as affordable
 
 PKG = {
     "baseline": {"label": "Baseline", "code": "vt_energy_code", "src": "natural_gas", "infra": "no", "fin": "average"},
@@ -50,16 +50,15 @@ def load_assumptions(p: Path) -> pd.DataFrame:
     missing = must_have - set(df.columns)
     if missing:
         st.error(f"Assumptions CSV missing columns: {missing}"); st.stop()
-
     for c in ("category","parent_option","option","value_type","unit"):
         df[c] = df[c].astype(str).str.strip().str.lower()
 
     def _norm_vtype(s: str) -> str:
-        t = s.replace("_", "").replace("-", "").replace(" ", "")
+        t = s.replace("_","").replace("-","").replace(" ","")
         if t in {"persf","psf","sf"}: return "per_sf"
         if t in {"perunit","unit"}:   return "per_unit"
         if t in {"fixed","flat","lump","fixedcost"}: return "fixed"
-        return s if s in {"per_sf","per_unit","fixed"} else s  # leave as-is if already canonical
+        return s if s in {"per_sf","per_unit","fixed"} else s
 
     df["value_type"] = df["value_type"].map(_norm_vtype)
     df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0.0)
@@ -126,26 +125,13 @@ def mf_factor(h_type): return one_val("mf_efficiency_factor","default",h_type)
 def baseline_per_sf(): return one_val("baseline_cost","baseline")
 
 def _sum_values(cat, opt, parents, vtype):
-    total = 0.0
-    for parent in parents:
-        r = _rows(cat, opt, parent)
-        if not r.empty:
-            m = r["value_type"].eq(vtype)
-            if m.any():
-                total += float(r.loc[m, "value"].sum())
-    return total
-
-def _sum_values(cat, opt, parents, vtype):
-    total = 0.0
     if opt is None: 
         return 0.0
     r = A[(A["category"].eq(cat)) &
           (A["option"].eq(str(opt).lower())) &
           (A["parent_option"].isin([p.lower() for p in parents])) &
           (A["value_type"].eq(vtype))]
-    if not r.empty:
-        total += float(r["value"].sum())
-    return total
+    return float(r["value"].sum()) if not r.empty else 0.0
 
 def _sum_overlay(cat, selected_opt, parents):
     per_sf  = _sum_values(cat, selected_opt, parents, "per_sf")  + _sum_values(cat, "default", parents, "per_sf")
@@ -154,7 +140,7 @@ def _sum_overlay(cat, selected_opt, parents):
     return per_sf, per_unit, fixed
 
 def compute_tdc(sf, htype, code, src, infra, fin):
-    base_psf = one_val("baseline_cost","baseline")
+    base_psf = baseline_per_sf()
     mf_mult  = mf_factor(htype)
     pct_mult = (one_val("energy_code", code) + one_val("finish_quality", fin)) / 100.0
     core_psf = base_psf * (mf_mult + pct_mult)
@@ -162,7 +148,6 @@ def compute_tdc(sf, htype, code, src, infra, fin):
     parents = [htype, "default"]
 
     es_psf, es_pu, es_fx = _sum_overlay("energy_source", src, parents)
-    in_psf, in_pu, in_fx = _sum_overlay("infrastructure", infra, parents)
 
     other = A[~A["category"].isin({"baseline_cost","mf_efficiency_factor","energy_code","finish_quality","energy_source","infrastructure","bedrooms"})]
     other = other[(other["option"].eq("default")) & (other["parent_option"].isin([htype, "default"]))]
@@ -172,9 +157,9 @@ def compute_tdc(sf, htype, code, src, infra, fin):
     other_fx   = float(other.loc[other["value_type"].eq("fixed"), "value"].sum()) if not other.empty else 0.0
 
     total = 0.0
-    total += sf * (core_psf + es_psf + in_psf + other_psf)
-    total += es_pu + in_pu + other_pu
-    total += es_fx + in_fx + other_fx
+    total += sf * (core_psf + es_psf + other_psf)
+    total += es_pu + other_pu
+    total += es_fx + other_fx
     return total
 
 def pick_afford_col(b_int, unit_type):
@@ -344,7 +329,6 @@ def _duplicate_from_previous(i):
     }
 
 def _prime_unit_widget_keys(i):
-    """Initialize widget keys from the unit state exactly once."""
     u = st.session_state.units[i]
     defaults = {
         f"pkg_{i}":  u["package"],
@@ -362,7 +346,6 @@ def _cb_set_package(i):
     def _cb():
         pkg_key = st.session_state[f"pkg_{i}"]
         _apply_package(i, pkg_key)
-        # keep widget values in sync with the package (prevents one-run lag)
         u = st.session_state.units[i]
         st.session_state[f"code_{i}"]  = u["components"]["code"]
         st.session_state[f"src_{i}"]   = u["components"]["src"]
@@ -402,14 +385,12 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
             with c2:
                 if u["is_custom"] and st.button("Reset to package", key=f"reset_{i}", disabled=disabled):
                     _apply_package(i, u["package"])
-                    # sync widgets to package defaults immediately
                     _prime_unit_widget_keys(i)
                     st.rerun()
 
         with st.expander("Advanced: adjust components", expanded=False):
             opt_code  = options("energy_code", DEFAULT_PARENT) or ["vt_energy_code"]
             opt_src   = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
-            opt_infra = options("infrastructure", DEFAULT_PARENT) or ["no","yes"]
             opt_fin   = options("finish_quality", DEFAULT_PARENT) or ["average","above_average","below_average"]
 
             st.selectbox("Energy code standard", opt_code,
@@ -418,9 +399,6 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
             st.selectbox("Energy source", opt_src,
                          format_func=pretty, key=f"src_{i}",
                          disabled=disabled, on_change=_cb_set_component(i, "src"))
-            st.selectbox("Infrastructure required?", opt_infra,
-                         format_func=pretty, key=f"infra_{i}",
-                         disabled=disabled, on_change=_cb_set_component(i, "infra"))
             st.selectbox("Finish quality", opt_fin,
                          format_func=pretty, key=f"fin_{i}",
                          disabled=disabled, on_change=_cb_set_component(i, "fin"))
@@ -435,11 +413,10 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
                  if not st.session_state.units[i]["is_custom"]
                  else (st.session_state.units[i].get("custom_label") or "Custom"))
 
-    # read back the components from widget keys to ensure returned dict matches UI 1:1
     comps = {
         "code":  st.session_state[f"code_{i}"],
         "src":   st.session_state[f"src_{i}"],
-        "infra": st.session_state[f"infra_{i}"],
+        "infra": st.session_state[f"infra_{i}"],  # ignored in compute_tdc
         "fin":   st.session_state[f"fin_{i}"],
     }
     return {"label": label, **comps}
@@ -516,21 +493,6 @@ elif apartment_mode:
 else:
     st.info("No valid unit data provided.")
 st.divider()
-
-with st.expander("Cost breakdown (debug)", expanded=False):
-    if not apartment_mode and units:
-        for idx, u in enumerate(units):
-            comps = u  # label, code, src, infra, fin
-            parents = [product, "default"]
-            es_psf, es_pu, es_fx = _sum_overlay("energy_source", comps["src"], parents)
-            in_psf, in_pu, in_fx = _sum_overlay("infrastructure", comps["infra"], parents)
-
-            st.write(f"**{comps['label']}**")
-            st.write({
-                "core_psf":        baseline_per_sf() * (mf_factor(product) + (one_val('energy_code', comps['code']) + one_val('finish_quality', comps['fin']))/100.0),
-                "energy_source":   {"per_sf": es_psf, "per_unit": es_pu, "fixed": es_fx},
-                "infrastructure":  {"per_sf": in_psf, "per_unit": in_pu, "fixed": in_fx},
-            })
 
 # ===== Step 4 — Specify Household Context =====
 st.header("Step 4 — Specify Household Context")
