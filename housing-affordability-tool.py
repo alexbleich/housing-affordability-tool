@@ -437,6 +437,7 @@ else:
 st.divider()
 
 # ===== Step 4 — Specify Household Context =====
+# ===== Step 4 — Specify Household Context =====
 st.header("Step 4 — Specify Household Context")
 st.subheader("Household Settings")
 st.caption("Select region, household size, and income to assess affordability for local households.")
@@ -444,8 +445,38 @@ with st.container(border=True):
     region_list_pretty = [REGION_PRETTY[k] for k in REGIONS]
     region_single = st.selectbox("Region", region_list_pretty, index=region_list_pretty.index("Chittenden"))
     household_size = st.selectbox("Select household size", list(range(1,9)), index=3)
-    user_income = st.number_input("Household income", min_value=20000, max_value=300000, step=1000, value=100000, format="%d")
-    st.caption("Note: AMI capped at 150%. Inputs above 150% use 150%")
+
+    # Dynamic income bounds from the VHFA table (clamped to the table's range, typically 30–150% AMI).
+    if not apartment_mode:
+        reg_key_bounds = PRETTY2REG[region_single]
+        p2i_b, i2p_b, inc_min_b, inc_max_b, _, _ = build_price_income_transformers(
+            reg_key_bounds, int(household_size), int(bedrooms)
+        )
+        if (inc_min_b is not None) and (inc_max_b is not None) and np.isfinite(inc_min_b) and np.isfinite(inc_max_b):
+            min_income = int(np.floor(inc_min_b))  # ~30% AMI income
+            max_income = int(np.ceil(inc_max_b))   # 150% AMI income (your screenshot)
+        else:
+            min_income, max_income = 20000, 300000
+    else:
+        min_income, max_income = 20000, 300000
+
+    # Keep prior value if present, but clamp to valid range
+    prior = int(st.session_state.get("last_income", 100000))
+    default_income = int(np.clip(prior, min_income, max_income))
+
+    user_income = st.number_input(
+        "Household income",
+        min_value=min_income,
+        max_value=max_income,
+        step=1000,
+        value=default_income,
+        format="%d",
+    )
+    st.session_state["last_income"] = int(user_income)
+
+    st.caption(
+        f"Max reflects 150% AMI for the selected region and household size (max: {fmt_money(max_income)})."
+    )
 
 # ===== Chart 2 =====
 if not apartment_mode and units:
@@ -460,8 +491,8 @@ if not apartment_mode and units:
     # Green line: YOUR income -> affordable price (clamped to table bounds)
     afford_price = None
     if i2p is not None and inc_min is not None:
-        inc_clamped = float(np.clip(float(user_income), inc_min, inc_max))
-        afford_price = float(np.clip(i2p(np.array([inc_clamped]))[0], price_min, price_max))
+        inc_clamped = float(user_income)  # UI already caps at 150% AMI
+        afford_price = float(i2p(np.array([inc_clamped]))[0]) if i2p is not None else None
 
     # Draw with true linked axis
     draw_chart2(labels, tdc_vals, afford_price, p2i, i2p)
