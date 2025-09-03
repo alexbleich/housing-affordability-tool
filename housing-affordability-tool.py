@@ -143,7 +143,7 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
     """
     One source of truth for Chart 2 (invertible pair for secondary_yaxis).
     Returns (price_to_income, income_to_price, income_min, income_max, price_min, price_max).
-    Vectorized for numpy arrays and scalars. Linear extrapolation at ends.
+    ALWAYS array-in → array-out (fixes tight_layout / transform errors).
     """
     df = R[region_key]
     inc_col, buy_col = f"income{hh_size}", f"buy{bed_n}"
@@ -165,32 +165,29 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
     else:
         m_lo = m_hi = mi_lo = mi_hi = 0.0
 
-    def _as_1d(a):
-        arr = np.asarray(a, dtype=float)
-        scalar = (arr.ndim == 0)
-        return (arr.reshape(-1), scalar)
-
     def price_to_income(p):
-        p_arr, scalar = _as_1d(p)
+        p_arr = np.asarray(p, dtype=float)
         out = np.empty_like(p_arr)
+        if out.size == 0: return out
         low  = p_arr <= xmin
         high = p_arr >= xmax
         mid  = ~(low | high)
-        if np.any(low):  out[low]  = ymin + m_lo * (p_arr[low] - xmin)
+        if np.any(low):  out[low]  = ymin + m_lo * (p_arr[low]  - xmin)
         if np.any(high): out[high] = ymax + m_hi * (p_arr[high] - xmax)
         if np.any(mid):  out[mid]  = np.interp(p_arr[mid], x, y)
-        return float(out[0]) if scalar else out
+        return out
 
     def income_to_price(i):
-        i_arr, scalar = _as_1d(i)
+        i_arr = np.asarray(i, dtype=float)
         out = np.empty_like(i_arr)
+        if out.size == 0: return out
         low  = i_arr <= ymin
         high = i_arr >= ymax
         mid  = ~(low | high)
-        if np.any(low):  out[low]  = xmin + mi_lo * (i_arr[low] - ymin)
+        if np.any(low):  out[low]  = xmin + mi_lo * (i_arr[low]  - ymin)
         if np.any(high): out[high] = xmax + mi_hi * (i_arr[high] - ymax)
         if np.any(mid):  out[mid]  = np.interp(i_arr[mid], y, x)
-        return float(out[0]) if scalar else out
+        return out
 
     return price_to_income, income_to_price, ymin, ymax, xmin, xmax
 
@@ -263,9 +260,7 @@ def draw_chart2(labels, tdc_vals, afford_price, price_to_income, income_to_price
         sec.yaxis.set_major_formatter(FuncFormatter(lambda v, _: fmt_money(v)))
         sec.yaxis.set_major_locator(MaxNLocator(prune='upper'))
     else:
-        sec = ax.twinx()
-        sec.set_yticks([])
-        sec.set_ylabel("Income Req. to Purchase")
+        sec = ax.twinx(); sec.set_yticks([]); sec.set_ylabel("Income Req. to Purchase")
 
     if line_handle is not None:
         ax.legend(handles=[line_handle], loc="upper right", frameon=True)
@@ -457,27 +452,32 @@ if not apartment_mode and units:
     st.subheader("What These Costs Mean for Your Constituents")
     reg_key = PRETTY2REG[region_single]
 
-    # Build the single pair of transforms from the chosen CSV (region + HH size + bedrooms)
+    # Build mapping pair from the chosen CSV (region + HH size + bedrooms)
     p2i, i2p, inc_min, inc_max, price_min, price_max = build_price_income_transformers(
         reg_key, int(household_size), int(bedrooms)
     )
 
-    # Green line: YOUR income -> affordable price (cap to table bounds)
+    # Green line: YOUR income -> affordable price (clamped to table bounds)
     afford_price = None
     if i2p is not None and inc_min is not None:
         inc_clamped = float(np.clip(float(user_income), inc_min, inc_max))
-        afford_price = float(np.clip(i2p(inc_clamped), price_min, price_max))
+        afford_price = float(np.clip(i2p(np.array([inc_clamped]))[0], price_min, price_max))
 
-    # Draw with linked right axis
+    # Draw with true linked axis
     draw_chart2(labels, tdc_vals, afford_price, p2i, i2p)
 
-    # Messaging: success if ANY option is affordable; equality counts
-    required_incomes = [p2i(v) for v in tdc_vals] if p2i is not None else []
-    def _affordable(user_inc, req_inc, atol=50.0):
-        return (req_inc is not None) and np.isfinite(req_inc) and ((user_inc >= req_inc) or np.isclose(user_inc, req_inc, rtol=1e-4, atol=atol))
-    any_affordable = any(_affordable(float(user_income), ri) for ri in required_incomes)
+    # Messaging: success if ANY option is affordable (equality counts)
+    if p2i is not None:
+        req_incomes = p2i(np.asarray(tdc_vals, dtype=float))
+        valid = np.isfinite(req_incomes)
+        def _affordable(ui, ri, atol=50.0):
+            return (ui >= ri) or np.isclose(ui, ri, rtol=1e-4, atol=atol)
+        any_aff = np.any(_affordable(float(user_income), req_incomes[valid]))
+    else:
+        valid = np.array([], dtype=bool)
+        any_aff = False
 
-    if any_affordable:
+    if any_aff:
         st.markdown(
             f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
             ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
@@ -486,8 +486,9 @@ if not apartment_mode and units:
             unsafe_allow_html=True
         )
     else:
-        cheapest_price = min(tdc_vals) if tdc_vals else None
-        required_income = p2i(cheapest_price) if (cheapest_price is not None and p2i is not None) else None
+        # Show the income needed for the cheapest option
+        cheapest_price = float(np.min(tdc_vals)) if len(tdc_vals) else None
+        required_income = p2i(np.array([cheapest_price]))[0] if (cheapest_price is not None and p2i is not None) else None
         need_text = fmt_money(required_income) if (required_income is not None and np.isfinite(required_income)) else "—"
         st.markdown(
             f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
