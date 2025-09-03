@@ -437,7 +437,6 @@ else:
 st.divider()
 
 # ===== Step 4 — Specify Household Context =====
-# ===== Step 4 — Specify Household Context =====
 st.header("Step 4 — Specify Household Context")
 st.subheader("Household Settings")
 st.caption("Select region, household size, and income to assess affordability for local households.")
@@ -446,33 +445,39 @@ with st.container(border=True):
     region_single = st.selectbox("Region", region_list_pretty, index=region_list_pretty.index("Chittenden"))
     household_size = st.selectbox("Select household size", list(range(1,9)), index=3)
 
-    # Dynamic income bounds from the VHFA table (clamped to the table's range, typically 30–150% AMI).
+    # Dynamic bounds from VHFA (≈30% to 150% AMI for this region + HH size + bedrooms)
     if not apartment_mode:
         reg_key_bounds = PRETTY2REG[region_single]
-        p2i_b, i2p_b, inc_min_b, inc_max_b, _, _ = build_price_income_transformers(
+        _p2i_b, _i2p_b, inc_min_b, inc_max_b, _, _ = build_price_income_transformers(
             reg_key_bounds, int(household_size), int(bedrooms)
         )
-        if (inc_min_b is not None) and (inc_max_b is not None) and np.isfinite(inc_min_b) and np.isfinite(inc_max_b):
-            min_income = int(np.floor(inc_min_b))  # ~30% AMI income
-            max_income = int(np.ceil(inc_max_b))   # 150% AMI income (your screenshot)
+        if all(v is not None and np.isfinite(v) for v in (inc_min_b, inc_max_b)):
+            min_income = int(np.floor(inc_min_b))
+            max_income = int(np.ceil(inc_max_b))
         else:
             min_income, max_income = 20000, 300000
     else:
         min_income, max_income = 20000, 300000
 
-    # Keep prior value if present, but clamp to valid range
-    prior = int(st.session_state.get("last_income", 100000))
-    default_income = int(np.clip(prior, min_income, max_income))
+    # Initialize/repair widget state BEFORE rendering, so a single Enter updates immediately
+    if "user_income" not in st.session_state:
+        st.session_state.user_income = int(np.clip(100000, min_income, max_income))
+    else:
+        if st.session_state.user_income < min_income or st.session_state.user_income > max_income:
+            st.session_state.user_income = int(np.clip(st.session_state.user_income, min_income, max_income))
 
-    user_income = st.number_input(
+    st.number_input(
         "Household income",
         min_value=min_income,
         max_value=max_income,
         step=1000,
-        value=default_income,
+        value=int(st.session_state.user_income),  # ignored after first render since key is set
+        key="user_income",
         format="%d",
     )
-    st.session_state["last_income"] = int(user_income)
+
+    # Use the widget's state everywhere below
+    user_income = float(st.session_state.user_income)
 
     st.caption(
         f"Max reflects 150% AMI for the selected region and household size (max: {fmt_money(max_income)})."
