@@ -158,7 +158,6 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
     xmin, xmax = x[0], x[-1]
     ymin, ymax = y[0], y[-1]
 
-    # Slopes for end extrapolation
     if len(x) > 1:
         m_lo  = (y[1] - y[0]) / (x[1] - x[0])
         m_hi  = (y[-1] - y[-2]) / (x[-1] - x[-2])
@@ -167,37 +166,47 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
     else:
         m_lo = m_hi = mi_lo = mi_hi = 0.0
 
-    # ===== Chart functions =====
+    def price_to_income(p: float) -> float:
+        if p is None or not np.isfinite(p): return np.nan
+        p = float(p)
+        if p <= xmin: return float(ymin + m_lo * (p - xmin))
+        if p >= xmax: return float(ymax + m_hi * (p - xmax))
+        return float(np.interp(p, x, y))
+
+    def income_to_price(i: float) -> float:
+        if i is None or not np.isfinite(i): return np.nan
+        i = float(i)
+        if i <= ymin: return float(xmin + mi_lo * (i - ymin))
+        if i >= ymax: return float(xmax + mi_hi * (i - ymax))
+        return float(np.interp(i, y, x))
+
+    return price_to_income, income_to_price, ymin, ymax, xmin, xmax
+
+# ===== Plot Utilities / Charts =====
 def _bar_with_values(ax, labels, values, pad_ratio):
     bars = ax.bar(labels, values, color="skyblue", edgecolor="black")
     for b in bars:
         y = b.get_height()
-        ax.text(
-            b.get_x() + b.get_width() / 2,
-            y * (1 + pad_ratio),
-            fmt_money(y),
-            ha="center",
-            va="bottom",
-            fontsize=10,
-        )
+        ax.text(b.get_x()+b.get_width()/2, y * (1 + pad_ratio), fmt_money(y), ha="center", va="bottom", fontsize=10)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
+
+def _apply_ylim(ax, ax2, ymax):
+    ax.set_ylim(0, ymax)
+    if ax2 is not None:
+        ax2.set_ylim(0, ymax)
 
 def draw_chart1(labels, tdc_vals, lines):
     fig, ax = plt.subplots(figsize=(12, 6))
     top_bar = max(tdc_vals) if tdc_vals else 1.0
     top_line = max(lines.values()) if lines else 0.0
     ymax = 1.2 * max(top_bar, top_line, 1.0)
-
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.02)
-
     if lines:
         for i, (lab, val) in enumerate(sorted(lines.items(), key=lambda kv: kv[0])):
             ax.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
-
-    ax.set_ylim(0, ymax)
+    _apply_ylim(ax, None, ymax)
     ax2 = ax.twinx()
-    ax2.set_ylim(0, ymax)
-
+    _apply_ylim(ax, ax2, ymax)
     if lines:
         ordered = [k for k, _ in sorted(lines.items(), key=lambda kv: kv[0])]
         vals = [lines[k] for k in ordered]
@@ -206,7 +215,6 @@ def draw_chart1(labels, tdc_vals, lines):
         ax.legend(loc="upper right")
     else:
         ax2.set_yticks([])
-
     ax.set_ylabel("Total Development Cost (TDC)")
     ax.set_xlabel("")
     ax2.set_ylabel("Max. Affordable Purchase Price (% AMI)")
@@ -227,11 +235,8 @@ def draw_chart2(labels, tdc_vals, afford_price, price_to_income, income_to_price
     line_handle = None
     if afford_price is not None and np.isfinite(afford_price):
         line_handle = ax.axhline(
-            y=float(afford_price),
-            linestyle="-",
-            linewidth=2.8,
-            color="#2E7D32",
-            label="Income level mapped to affordable purchase price",
+            y=float(afford_price), linestyle="-", linewidth=2.8, color="#2E7D32",
+            label="Income level mapped to affordable purchase price"
         )
 
     ax.set_ylim(0, ymax)
@@ -240,12 +245,12 @@ def draw_chart2(labels, tdc_vals, afford_price, price_to_income, income_to_price
     ax.set_title("Purchase Ability by Income, Household Size, and Region")
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
 
-    # Right axis: true linked transform (keeps scales in sync; prunes top tick)
+    # Right axis: true linked transform; prune the very top tick
     if price_to_income is not None and income_to_price is not None:
-        sec = ax.secondary_yaxis("right", functions=(price_to_income, income_to_price))
+        sec = ax.secondary_yaxis('right', functions=(price_to_income, income_to_price))
         sec.set_ylabel("Income Req. to Purchase")
         sec.yaxis.set_major_formatter(FuncFormatter(lambda v, _: fmt_money(v)))
-        sec.yaxis.set_major_locator(MaxNLocator(prune="upper"))
+        sec.yaxis.set_major_locator(MaxNLocator(prune='upper'))
     else:
         sec = ax.twinx()
         sec.set_yticks([])
@@ -258,21 +263,47 @@ def draw_chart2(labels, tdc_vals, afford_price, price_to_income, income_to_price
     fig.tight_layout()
     st.pyplot(fig)
 
-    def price_to_income(p: float) -> float:
-        if p is None or not np.isfinite(p): return np.nan
-        p = float(p)
-        if p <= xmin: return float(ymin + m_lo * (p - xmin))
-        if p >= xmax: return float(ymax + m_hi * (p - xmax))
-        return float(np.interp(p, x, y))
+# ===== Session State (units) =====
+def _ensure_units(n):
+    if "units" not in st.session_state:
+        st.session_state.units = []
+    while len(st.session_state.units) < n:
+        st.session_state.units.append({
+            "package": "baseline",
+            "components": dict(code=PKG["baseline"]["code"], src=PKG["baseline"]["src"],
+                               infra=PKG["baseline"]["infra"], fin=PKG["baseline"]["fin"]),
+            "is_custom": False,
+            "custom_label": "Custom",
+        })
+    if len(st.session_state.units) > n:
+        st.session_state.units = st.session_state.units[:n]
 
-    def income_to_price(i: float) -> float:
-        if i is None or not np.isfinite(i): return np.nan
-        i = float(i)
-        if i <= ymin: return float(xmin + mi_lo * (i - ymin))
-        if i >= ymax: return float(xmax + mi_hi * (i - ymax))
-        return float(np.interp(i, y, x))
+def _apply_package(i, pkg_key):
+    u = st.session_state.units[i]
+    u["package"] = pkg_key
+    u["components"] = dict(code=PKG[pkg_key]["code"], src=PKG[pkg_key]["src"],
+                           infra=PKG[pkg_key]["infra"], fin=PKG[pkg_key]["fin"])
+    u["is_custom"] = False
 
-    return price_to_income, income_to_price, ymin, ymax, xmin, xmax
+def _update_component(i, field, value):
+    u = st.session_state.units[i]
+    u["components"][field] = value
+    p = PKG[u["package"]]
+    u["is_custom"] = any([
+        u["components"]["code"]  != p["code"],
+        u["components"]["src"]   != p["src"],
+        u["components"]["infra"] != p["infra"],
+        u["components"]["fin"]   != p["fin"],
+    ])
+
+def _duplicate_from_previous(i):
+    prev = st.session_state.units[i-1]
+    st.session_state.units[i] = {
+        "package": prev["package"],
+        "components": prev["components"].copy(),
+        "is_custom": prev["is_custom"],
+        "custom_label": prev.get("custom_label", "Custom"),
+    }
 
 # ===== Header =====
 st.title("🏘️ Housing Affordability Visualizer")
@@ -415,7 +446,7 @@ if not apartment_mode and units:
     st.subheader("What These Costs Mean for Your Constituents")
     reg_key = PRETTY2REG[region_single]
 
-    # One source of truth from the chosen CSV (region + HH size + bedrooms)
+    # Build the single pair of transforms from the chosen CSV (region + HH size + bedrooms)
     p2i, i2p, inc_min, inc_max, price_min, price_max = build_price_income_transformers(
         reg_key, int(household_size), int(bedrooms)
     )
@@ -429,25 +460,23 @@ if not apartment_mode and units:
     # Draw with a mathematically linked right axis
     draw_chart2(labels, tdc_vals, afford_price, p2i, i2p)
 
-    # Messaging: compare your income to required income for the cheapest option
-    cheapest_price = min(tdc_vals) if tdc_vals else None
-    required_income = p2i(cheapest_price) if (cheapest_price is not None and p2i is not None) else None
-
-    # Treat exact equality as success (tolerance kills float/rounding noise)
+    # Messaging: success if ANY option is affordable; otherwise show required income for cheapest option.
+    required_incomes = [p2i(v) for v in tdc_vals] if p2i is not None else []
     def _affordable(user_inc, req_inc, atol=50.0):
-        if req_inc is None or not np.isfinite(req_inc):
-            return False
-        return (user_inc >= req_inc) or np.isclose(user_inc, req_inc, rtol=1e-4, atol=atol)
+        return (req_inc is not None) and np.isfinite(req_inc) and ((user_inc >= req_inc) or np.isclose(user_inc, req_inc, rtol=1e-4, atol=atol))
 
-    if _affordable(float(user_income), float(required_income) if required_income is not None else None):
+    any_affordable = any(_affordable(float(user_income), ri) for ri in required_incomes)
+    if any_affordable:
         st.markdown(
             f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
             ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
-            you can afford <b>the cheapest option</b>.
+            at least one option is affordable.
             </div>""",
             unsafe_allow_html=True
         )
     else:
+        cheapest_price = min(tdc_vals) if tdc_vals else None
+        required_income = p2i(cheapest_price) if (cheapest_price is not None and p2i is not None) else None
         need_text = fmt_money(required_income) if (required_income is not None and np.isfinite(required_income)) else "—"
         st.markdown(
             f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
