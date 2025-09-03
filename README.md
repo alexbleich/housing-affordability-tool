@@ -27,15 +27,12 @@ Access the tool here: https://housing-affordability-tool.streamlit.app
   - Household size (1–8)
   - Household income (bounded to the AMI table for the selected region & size; **max is the 150% AMI income**)
 
-> **Note:** Infrastructure is currently **ignored** in TDC calculations to avoid overstating per-unit costs for condos. It may be re-enabled later with project-level assumptions.
-
 ---
 
 ## What It Does
 - Calculates TDC per unit using:
   - Baseline $/sf × (multifamily efficiency factor + policy % adders) × unit square footage
-  - Plus energy-source $/sf adders  
-  - *(Infrastructure adders are intentionally excluded right now.)*
+  - Plus energy-source and infrastructure requirement $/sf adders  
 - Retrieves affordable **purchase price** thresholds by AMI and region
 - Builds an **invertible mapping between purchase price and household income** from the VHFA table so **both y-axes stay in sync** (with the top duplicate tick pruned)
 
