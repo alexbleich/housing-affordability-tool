@@ -29,9 +29,9 @@ REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "R
 PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 
 VALID_AMIS = [30] + list(range(50, 155, 5))
-DEFAULT_AMIS = [150, 120, 100]
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
+AFFORD_EPS = 0.5
 
 PKG = {
     "baseline": {"label": "Baseline", "code": "vt_energy_code", "src": "natural_gas", "infra": "no", "fin": "average"},
@@ -141,19 +141,17 @@ def affordability_lines(region_pretty_list, amis, col):
 
 def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
     """
-    One source of truth for Chart 2 (invertible pair for secondary_yaxis).
-    Returns (price_to_income, income_to_price, income_min, income_max, price_min, price_max).
-    ALWAYS array-in → array-out (fixes tight_layout / transform errors).
+    Returns (price_to_income, income_to_price, income_min, income_max, price_min, price_max)
+    as array→array functions using piecewise-linear interpolation with linear extrapolation.
     """
     df = R[region_key]
     inc_col, buy_col = f"income{hh_size}", f"buy{bed_n}"
     if not {inc_col, buy_col}.issubset(df.columns): return None, None, None, None, None, None
-
     sub = df[[buy_col, inc_col]].apply(pd.to_numeric, errors="coerce").dropna().sort_values(buy_col)
     if sub.empty: return None, None, None, None, None, None
 
-    x = sub[buy_col].to_numpy(dtype=float)  # price
-    y = sub[inc_col].to_numpy(dtype=float)  # income
+    x = sub[buy_col].to_numpy(dtype=float)
+    y = sub[inc_col].to_numpy(dtype=float)
     xmin, xmax = x[0], x[-1]
     ymin, ymax = y[0], y[-1]
 
@@ -191,18 +189,18 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
 
     return price_to_income, income_to_price, ymin, ymax, xmin, xmax
 
-# ===== Chart utilities =====
+def affordable_mask(user_income, required_incomes, eps=AFFORD_EPS):
+    r = np.asarray(required_incomes, dtype=float)
+    ui = float(user_income)
+    return np.isfinite(r) & ((ui + eps) >= r)
+
+# ===== Chart Utils =====
 def _bar_with_values(ax, labels, values, pad_ratio):
     bars = ax.bar(labels, values, color="skyblue", edgecolor="black")
     for b in bars:
         y = b.get_height()
         ax.text(b.get_x()+b.get_width()/2, y * (1 + pad_ratio), fmt_money(y), ha="center", va="bottom", fontsize=10)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
-
-def _apply_ylim(ax, ax2, ymax):
-    ax.set_ylim(0, ymax)
-    if ax2 is not None:
-        ax2.set_ylim(0, ymax)
 
 def draw_chart1(labels, tdc_vals, lines):
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -213,9 +211,9 @@ def draw_chart1(labels, tdc_vals, lines):
     if lines:
         for i, (lab, val) in enumerate(sorted(lines.items(), key=lambda kv: kv[0])):
             ax.axhline(y=val, linestyle="--", color=f"C{i}", label=lab)
-    _apply_ylim(ax, None, ymax)
+    ax.set_ylim(0, ymax)
     ax2 = ax.twinx()
-    _apply_ylim(ax, ax2, ymax)
+    ax2.set_ylim(0, ymax)
     if lines:
         ordered = [k for k, _ in sorted(lines.items(), key=lambda kv: kv[0])]
         vals = [lines[k] for k in ordered]
@@ -234,26 +232,18 @@ def draw_chart1(labels, tdc_vals, lines):
 
 def draw_chart2(labels, tdc_vals, afford_price, price_to_income, income_to_price):
     fig, ax = plt.subplots(figsize=(12, 6))
-
     top_bar  = max(tdc_vals) if tdc_vals else 1.0
     top_line = float(afford_price) if (afford_price is not None and np.isfinite(afford_price)) else 0.0
     ymax = 1.2 * max(top_bar, top_line, 1.0)
-
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.025)
-
-    line_handle = None
     if afford_price is not None and np.isfinite(afford_price):
-        line_handle = ax.axhline(
-            y=float(afford_price), linestyle="-", linewidth=2.8, color="#2E7D32",
-            label="Income level mapped to affordable purchase price"
-        )
-
+        ax.axhline(y=float(afford_price), linestyle="-", linewidth=2.8, color="#2E7D32",
+                   label="Income level mapped to affordable purchase price")
     ax.set_ylim(0, ymax)
     ax.set_ylabel("Total Development Cost (TDC)")
     ax.set_xlabel("")
     ax.set_title("Purchase Ability by Income, Household Size, and Region")
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
-
     if price_to_income is not None and income_to_price is not None:
         sec = ax.secondary_yaxis('right', functions=(price_to_income, income_to_price))
         sec.set_ylabel("Income Req. to Purchase")
@@ -261,10 +251,7 @@ def draw_chart2(labels, tdc_vals, afford_price, price_to_income, income_to_price
         sec.yaxis.set_major_locator(MaxNLocator(prune='upper'))
     else:
         sec = ax.twinx(); sec.set_yticks([]); sec.set_ylabel("Income Req. to Purchase")
-
-    if line_handle is not None:
-        ax.legend(handles=[line_handle], loc="upper right", frameon=True)
-
+    ax.legend(loc="upper right", frameon=True)
     plt.xticks(rotation=0)
     fig.tight_layout()
     st.pyplot(fig)
@@ -311,38 +298,7 @@ def _duplicate_from_previous(i):
         "custom_label": prev.get("custom_label", "Custom"),
     }
 
-# ===== Header =====
-st.title("🏘️ Housing Affordability Visualizer")
-st.write("Pick your policies below to see how it affects affordability.")
-st.markdown("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)")
-st.write("")
-
-# ===== Step 1 — Housing Type =====
-st.header("Step 1 — Housing Type")
-product = st.radio("What kind of housing are we talking about?",
-                   ["townhome","condo","apartment"],
-                   format_func=pretty, horizontal=True, key="global_product")
-apartment_mode = (product == "apartment")
-if not apartment_mode:
-    br_opts = options("bedrooms", parent=product) or ["2"]
-    bedrooms = st.selectbox("Number of bedrooms",
-                            [*br_opts], index=(br_opts.index("2") if "2" in br_opts else 0),
-                            format_func=pretty, key="global_bedrooms")
-    sf = bedroom_sf(product, bedrooms) or 1000.0
-else:
-    bedrooms, sf = None, None
-    st.info("Apartment modeling (rent-based) coming soon. For now, choose Townhome or Condo to compare for-sale products.")
-
-st.divider()
-
-# ===== Step 2 — Pick your Policies =====
-st.header("Step 2 — Pick your Policies")
-num_units = st.selectbox("How many units would you like to compare?", [1,2,3,4,5], index=1, disabled=apartment_mode)
-def _ensure_and_get_units():
-    _ensure_units(num_units)
-    return st.session_state.units
-units_state = _ensure_and_get_units()
-def render_unit_card(i: int, disabled: bool = False):
+def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
     u = st.session_state.units[i]
     st.subheader(f"{pretty(product)} {i+1}")
     with st.container(border=True):
@@ -394,9 +350,41 @@ def render_unit_card(i: int, disabled: bool = False):
         label = PKG[u["package"]]["label"] if not u["is_custom"] else (u.get("custom_label") or "Custom")
     return {"label": label, "code": u["components"]["code"], "src": u["components"]["src"],
             "infra": u["components"]["infra"], "fin": u["components"]["fin"]}
+
+# ===== Header =====
+st.title("🏘️ Housing Affordability Visualizer")
+st.write("Pick your policies below to see how it affects affordability.")
+st.markdown("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)")
+st.write("")
+
+# ===== Step 1 — Housing Type =====
+st.header("Step 1 — Housing Type")
+product = st.radio("What kind of housing are we talking about?",
+                   ["townhome","condo","apartment"],
+                   format_func=pretty, horizontal=True, key="global_product")
+apartment_mode = (product == "apartment")
+if not apartment_mode:
+    br_opts = options("bedrooms", parent=product) or ["2"]
+    bedrooms = st.selectbox("Number of bedrooms",
+                            [*br_opts], index=(br_opts.index("2") if "2" in br_opts else 0),
+                            format_func=pretty, key="global_bedrooms")
+    sf = bedroom_sf(product, bedrooms) or 1000.0
+else:
+    bedrooms, sf = None, None
+    st.info("Apartment modeling (rent-based) coming soon. For now, choose Townhome or Condo to compare for-sale products.")
+
+st.divider()
+
+# ===== Step 2 — Pick your Policies =====
+st.header("Step 2 — Pick your Policies")
+num_units = st.selectbox("How many units would you like to compare?", [1,2,3,4,5], index=1, disabled=apartment_mode)
+def _ensure_and_get_units():
+    _ensure_units(num_units)
+    return st.session_state.units
+_ensure_and_get_units()
 units = []
 for i in range(num_units):
-    units.append(render_unit_card(i, disabled=apartment_mode))
+    units.append(render_unit_card(i, disabled=apartment_mode, product=product))
     st.write("")
 st.divider()
 
@@ -445,10 +433,9 @@ with st.container(border=True):
     region_single = st.selectbox("Region", region_list_pretty, index=region_list_pretty.index("Chittenden"))
     household_size = st.selectbox("Select household size", list(range(1,9)), index=3)
 
-    # Dynamic bounds from VHFA (≈30% to 150% AMI for this region + HH size + bedrooms)
     if not apartment_mode:
         reg_key_bounds = PRETTY2REG[region_single]
-        _p2i_b, _i2p_b, inc_min_b, inc_max_b, _, _ = build_price_income_transformers(
+        p2i_b, i2p_b, inc_min_b, inc_max_b, _, _ = build_price_income_transformers(
             reg_key_bounds, int(household_size), int(bedrooms)
         )
         if all(v is not None and np.isfinite(v) for v in (inc_min_b, inc_max_b)):
@@ -459,7 +446,6 @@ with st.container(border=True):
     else:
         min_income, max_income = 20000, 300000
 
-    # Initialize/repair widget state BEFORE rendering, so a single Enter updates immediately
     if "user_income" not in st.session_state:
         st.session_state.user_income = int(np.clip(100000, min_income, max_income))
     else:
@@ -471,67 +457,102 @@ with st.container(border=True):
         min_value=min_income,
         max_value=max_income,
         step=1000,
-        value=int(st.session_state.user_income),  # ignored after first render since key is set
+        value=int(st.session_state.user_income),
         key="user_income",
         format="%d",
     )
-
-    # Use the widget's state everywhere below
     user_income = float(st.session_state.user_income)
+    st.caption(f"Max reflects 150% AMI for the selected region and household size (max: {fmt_money(max_income)}).")
 
-    st.caption(
-        f"Max reflects 150% AMI for the selected region and household size (max: {fmt_money(max_income)})."
-    )
-
-# ===== Chart 2 =====
+# ===== Chart 2 + Messaging =====
 if not apartment_mode and units:
     st.subheader("What These Costs Mean for Your Constituents")
     reg_key = PRETTY2REG[region_single]
+    p2i, i2p, inc_min, inc_max, price_min, price_max = build_price_income_transformers(reg_key, int(household_size), int(bedrooms))
 
-    # Build mapping pair from the chosen CSV (region + HH size + bedrooms)
-    p2i, i2p, inc_min, inc_max, price_min, price_max = build_price_income_transformers(
-        reg_key, int(household_size), int(bedrooms)
-    )
-
-    # Green line: YOUR income -> affordable price (clamped to table bounds)
-    afford_price = None
-    if i2p is not None and inc_min is not None:
-        inc_clamped = float(user_income)  # UI already caps at 150% AMI
-        afford_price = float(i2p(np.array([inc_clamped]))[0]) if i2p is not None else None
-
-    # Draw with true linked axis
-    draw_chart2(labels, tdc_vals, afford_price, p2i, i2p)
-
-        # Messaging: success if ANY option is affordable (treat equality as affordable with small tolerance)
-    any_aff = False
-    if p2i is not None:
-        req_incomes = p2i(np.asarray(tdc_vals, dtype=float))  # array
-        r = req_incomes[np.isfinite(req_incomes)]
-        if r.size > 0:
-            ui = float(user_income)
-            # vectorized: array-or, not Python 'or'
-            any_aff = bool(np.any((ui >= r) | np.isclose(ui, r, rtol=1e-4, atol=50.0)))
-
-    if any_aff:
-        st.markdown(
-            f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
-            ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
-            at least one option is affordable.
-            </div>""",
-            unsafe_allow_html=True
-        )
+    if p2i is None or i2p is None:
+        st.warning("Not enough data to build the price↔income mapping for this selection.")
     else:
-        # Show the income needed for the cheapest option
-        cheapest_price = float(np.min(tdc_vals)) if len(tdc_vals) else None
-        required_income = p2i(np.array([cheapest_price]))[0] if (cheapest_price is not None and p2i is not None) else None
-        need_text = fmt_money(required_income) if (required_income is not None and np.isfinite(required_income)) else "—"
-        st.markdown(
-            f"""<div style="padding:0.5rem 0.75rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
-            ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
-            none of the options are affordable. A household of this size would need to make at least <b>{need_text}</b> to afford the cheapest option.
-            </div>""",
-            unsafe_allow_html=True
-        )
+        afford_price = float(i2p(np.array([user_income]))[0])
+        draw_chart2(labels, tdc_vals, afford_price, p2i, i2p)
+
+        prices = np.asarray(tdc_vals, dtype=float)
+        req_incomes = p2i(prices)
+        mask = affordable_mask(user_income, req_incomes)
+
+        order = np.argsort(prices)
+        prices_sorted = prices[order]
+        labels_sorted = [labels[i] for i in order]
+        req_sorted = req_incomes[order]
+        mask_sorted = mask[order]
+
+        if np.all(mask_sorted):
+            headroom = float(user_income) - float(np.max(req_sorted))
+            st.markdown(
+                f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
+                ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                <b>all {len(labels_sorted)}</b> options are affordable. You are <b>{fmt_money(headroom)}</b> above what is needed for the most expensive option.
+                </div>""",
+                unsafe_allow_html=True
+            )
+        elif not np.any(mask_sorted):
+            i_min = int(np.argmin(prices_sorted)) if len(prices_sorted) else None
+            required_income = p2i(np.array([prices_sorted[i_min]]))[0] if (i_min is not None) else np.nan
+            shortfall = max(0.0, float(required_income) - float(user_income)) if np.isfinite(required_income) else np.nan
+            need_text = fmt_money(required_income) if np.isfinite(required_income) else "—"
+            short_text = f" (short by <b>{fmt_money(shortfall)}</b>)" if np.isfinite(shortfall) and shortfall > 0 else ""
+            st.markdown(
+                f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">
+                ❌ <b>Keep trying:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                none of the options are affordable. The cheapest option (<b>{labels_sorted[i_min]}</b>, {fmt_money(prices_sorted[i_min])})
+                would require <b>{need_text}</b>{short_text}.
+                </div>""",
+                unsafe_allow_html=True
+            )
+        else:
+            first_false = int(np.argmax(~mask_sorted))
+            k_prefix = first_false if np.any(~mask_sorted) else len(mask_sorted)
+            contiguous = np.all(~mask_sorted[k_prefix:])  # True if affordability is a cheapest-prefix only
+
+            if contiguous:
+                if k_prefix == 1:
+                    idx_next = k_prefix
+                    need_next = req_sorted[idx_next]
+                    short_next = max(0.0, float(need_next) - float(user_income))
+                    st.markdown(
+                        f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
+                        ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                        <b>only the cheapest option</b> is affordable. The next option (<b>{labels_sorted[idx_next]}</b>) would require <b>{fmt_money(need_next)}</b>
+                        (short by <b>{fmt_money(short_next)}</b>).
+                        </div>""",
+                        unsafe_allow_html=True
+                    )
+                else:
+                    idx_next = k_prefix
+                    need_next = req_sorted[idx_next]
+                    short_next = max(0.0, float(need_next) - float(user_income))
+                    st.markdown(
+                        f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
+                        ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                        the <b>lowest {k_prefix} options</b> are affordable. The next option (<b>{labels_sorted[idx_next]}</b>) would require <b>{fmt_money(need_next)}</b>
+                        (short by <b>{fmt_money(short_next)}</b>).
+                        </div>""",
+                        unsafe_allow_html=True
+                    )
+            else:
+                affordable_labels = [labels_sorted[i] for i, ok in enumerate(mask_sorted) if ok]
+                idx_next = int(np.where(~mask_sorted)[0][0])
+                need_next = req_sorted[idx_next]
+                short_next = max(0.0, float(need_next) - float(user_income))
+                st.markdown(
+                    f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">
+                    ✅ <b>Success:</b> At your income (<b>{fmt_money(user_income)}</b>) and household size (<b>{household_size}</b>),
+                    <b>{len(affordable_labels)} of {len(labels_sorted)} options</b> are affordable: {", ".join(f"<b>{l}</b>" for l in affordable_labels)}.
+                    The cheapest unaffordable option (<b>{labels_sorted[idx_next]}</b>) would require <b>{fmt_money(need_next)}</b>
+                    (short by <b>{fmt_money(short_next)}</b>).
+                    </div>""",
+                    unsafe_allow_html=True
+                )
 
 st.write("")
 st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
