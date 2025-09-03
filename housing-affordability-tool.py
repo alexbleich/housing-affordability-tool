@@ -31,7 +31,7 @@ PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 VALID_AMIS = [30] + list(range(50, 155, 5))
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
-AFFORD_EPS = 0.5  # small cushion so exact-equals count as affordable
+AFFORD_EPS = 0.5
 
 PKG = {
     "baseline": {"label": "Baseline", "code": "vt_energy_code", "src": "natural_gas", "infra": "no", "fin": "average"},
@@ -416,7 +416,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
     comps = {
         "code":  st.session_state[f"code_{i}"],
         "src":   st.session_state[f"src_{i}"],
-        "infra": st.session_state[f"infra_{i}"],  # ignored in compute_tdc
+        "infra": st.session_state[f"infra_{i}"],
         "fin":   st.session_state[f"fin_{i}"],
     }
     return {"label": label, **comps}
