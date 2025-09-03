@@ -115,13 +115,50 @@ def bedroom_sf(h_type, br_label):
 def mf_factor(h_type): return one_val("mf_efficiency_factor","default",h_type)
 def baseline_per_sf(): return one_val("baseline_cost","baseline")
 
+def _sum_values(cat, opt, parents, vtype):
+    total = 0.0
+    for parent in parents:
+        r = _rows(cat, opt, parent)
+        if not r.empty:
+            m = r["value_type"].eq(vtype)
+            if m.any():
+                total += float(r.loc[m, "value"].sum())
+    return total
+
+def _sum_overlay(cat, selected_opt, parents):
+    per_sf  = _sum_values(cat, selected_opt, parents, "per_sf") + _sum_values(cat, DEFAULT_PARENT, parents, "per_sf")
+    per_unit= _sum_values(cat, selected_opt, parents, "per_unit") + _sum_values(cat, DEFAULT_PARENT, parents, "per_unit")
+    fixed   = _sum_values(cat, selected_opt, parents, "fixed") + _sum_values(cat, DEFAULT_PARENT, parents, "fixed")
+    return per_sf, per_unit, fixed
+
+def _collect_generic_adders(product):
+    known = {"baseline_cost","mf_efficiency_factor","energy_code","finish_quality","energy_source","infrastructure","bedrooms"}
+    per_sf = per_unit = fixed = 0.0
+    r = A[~A["category"].isin(known)]
+    r = r[(r["parent_option"].isin([product, DEFAULT_PARENT])) & (r["option"].eq(DEFAULT_PARENT))]
+    if not r.empty:
+        per_sf  += float(r.loc[r["value_type"].eq("per_sf"), "value"].sum())
+        per_unit+= float(r.loc[r["value_type"].eq("per_unit"), "value"].sum())
+        fixed   += float(r.loc[r["value_type"].eq("fixed"), "value"].sum())
+    return per_sf, per_unit, fixed
+
 def compute_tdc(sf, htype, code, src, infra, fin):
     base = baseline_per_sf()
-    pct = (one_val("energy_code", code) + one_val("finish_quality", fin)) / 100.0
+    pct  = (one_val("energy_code", code) + one_val("finish_quality", fin)) / 100.0
     per_sf = base * (mf_factor(htype) + pct)
-    per_sf += one_val("energy_source", src, DEFAULT_PARENT, "per_sf")
-    per_sf += one_val("infrastructure", infra, DEFAULT_PARENT, "per_sf")
-    return sf * per_sf
+
+    parents = [htype, DEFAULT_PARENT]
+
+    es_psf, es_pu, es_fx = _sum_overlay("energy_source", src, parents)
+    in_psf, in_pu, in_fx = _sum_overlay("infrastructure", infra, parents)
+    gen_psf, gen_pu, gen_fx = _collect_generic_adders(htype)
+
+    total = 0.0
+    total += sf * per_sf
+    total += sf * (es_psf + in_psf + gen_psf)
+    total += es_pu + in_pu + gen_pu
+    total += es_fx + in_fx + gen_fx
+    return total
 
 def pick_afford_col(b_int, unit_type):
     b = int(np.clip(b_int, 0, 5))
@@ -140,21 +177,15 @@ def affordability_lines(region_pretty_list, amis, col):
     return lines
 
 def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
-    """
-    Returns (price_to_income, income_to_price, income_min, income_max, price_min, price_max)
-    as array→array functions using piecewise-linear interpolation with linear extrapolation.
-    """
     df = R[region_key]
     inc_col, buy_col = f"income{hh_size}", f"buy{bed_n}"
     if not {inc_col, buy_col}.issubset(df.columns): return None, None, None, None, None, None
     sub = df[[buy_col, inc_col]].apply(pd.to_numeric, errors="coerce").dropna().sort_values(buy_col)
     if sub.empty: return None, None, None, None, None, None
-
     x = sub[buy_col].to_numpy(dtype=float)
     y = sub[inc_col].to_numpy(dtype=float)
     xmin, xmax = x[0], x[-1]
     ymin, ymax = y[0], y[-1]
-
     if len(x) > 1:
         m_lo  = (y[1] - y[0]) / (x[1] - x[0])
         m_hi  = (y[-1] - y[-2]) / (x[-1] - x[-2])
@@ -162,7 +193,6 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
         mi_hi = (x[-1] - x[-2]) / (y[-1] - y[-2]) if y[-1] != y[-2] else 0.0
     else:
         m_lo = m_hi = mi_lo = mi_hi = 0.0
-
     def price_to_income(p):
         p_arr = np.asarray(p, dtype=float)
         out = np.empty_like(p_arr)
@@ -174,7 +204,6 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
         if np.any(high): out[high] = ymax + m_hi * (p_arr[high] - xmax)
         if np.any(mid):  out[mid]  = np.interp(p_arr[mid], x, y)
         return out
-
     def income_to_price(i):
         i_arr = np.asarray(i, dtype=float)
         out = np.empty_like(i_arr)
@@ -186,7 +215,6 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
         if np.any(high): out[high] = xmax + mi_hi * (i_arr[high] - ymax)
         if np.any(mid):  out[mid]  = np.interp(i_arr[mid], y, x)
         return out
-
     return price_to_income, income_to_price, ymin, ymax, xmin, xmax
 
 def affordable_mask(user_income, required_incomes, eps=AFFORD_EPS):
@@ -512,8 +540,7 @@ if not apartment_mode and units:
         else:
             first_false = int(np.argmax(~mask_sorted))
             k_prefix = first_false if np.any(~mask_sorted) else len(mask_sorted)
-            contiguous = np.all(~mask_sorted[k_prefix:])  # True if affordability is a cheapest-prefix only
-
+            contiguous = np.all(~mask_sorted[k_prefix:])
             if contiguous:
                 if k_prefix == 1:
                     idx_next = k_prefix
