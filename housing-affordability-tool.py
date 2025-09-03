@@ -435,9 +435,14 @@ product = st.radio("What kind of housing are we talking about?",
 apartment_mode = (product == "apartment")
 if not apartment_mode:
     br_opts = options("bedrooms", parent=product) or ["2"]
-    bedrooms = st.selectbox("Number of bedrooms",
-                            [*br_opts], index=(br_opts.index("2") if "2" in br_opts else 0),
-                            format_func=pretty, key="global_bedrooms")
+    bedrooms = st.radio(
+        "Number of bedrooms",
+        br_opts,
+        index=(br_opts.index("2") if "2" in br_opts else 0),
+        format_func=pretty,
+        horizontal=True,
+        key="global_bedrooms",
+    )
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
@@ -447,7 +452,14 @@ st.divider()
 
 # ===== Step 2 — Pick your Policies =====
 st.header("Step 2 — Pick your Policies")
-num_units = st.selectbox("How many units would you like to compare?", [1,2,3,4,5], index=1, disabled=apartment_mode)
+num_units = st.radio(
+    "How many units would you like to compare?",
+    [1, 2, 3, 4, 5],
+    index=1,
+    horizontal=True,
+    disabled=apartment_mode,
+    key="num_units",
+)
 def _ensure_and_get_units():
     _ensure_units(num_units)
     return st.session_state.units
@@ -462,7 +474,13 @@ st.divider()
 st.header("Step 3 — Compare Costs with Affordability")
 st.subheader("Affordability Thresholds")
 with st.container(border=True):
-    n_amis = st.selectbox("How many Area Median Income (AMI) levels?", [1,2,3], index=0)
+    n_amis = st.radio(
+        "How many Area Median Income (AMI) levels?",
+        [1, 2, 3],
+        index=0,
+        horizontal=True,
+        key="n_amis",
+    )
     def default_ami_for_idx(i):
         defaults3 = [100, 150, 80]
         if n_amis == 3: return defaults3[i]
@@ -501,7 +519,13 @@ st.caption("Select region, household size, and income to assess affordability fo
 with st.container(border=True):
     region_list_pretty = [REGION_PRETTY[k] for k in REGIONS]
     region_single = st.selectbox("Region", region_list_pretty, index=region_list_pretty.index("Chittenden"))
-    household_size = st.selectbox("Select household size", list(range(1,9)), index=3)
+    household_size = st.radio(
+        "Select household size",
+        list(range(1, 9)),
+        index=3,
+        horizontal=True,
+        key="household_size",
+    )
 
     if not apartment_mode:
         reg_key_bounds = PRETTY2REG[region_single]
