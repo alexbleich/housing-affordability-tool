@@ -50,8 +50,18 @@ def load_assumptions(p: Path) -> pd.DataFrame:
     missing = must_have - set(df.columns)
     if missing:
         st.error(f"Assumptions CSV missing columns: {missing}"); st.stop()
+
     for c in ("category","parent_option","option","value_type","unit"):
         df[c] = df[c].astype(str).str.strip().str.lower()
+
+    def _norm_vtype(s: str) -> str:
+        t = s.replace("_", "").replace("-", "").replace(" ", "")
+        if t in {"persf","psf","sf"}: return "per_sf"
+        if t in {"perunit","unit"}:   return "per_unit"
+        if t in {"fixed","flat","lump","fixedcost"}: return "fixed"
+        return s if s in {"per_sf","per_unit","fixed"} else s  # leave as-is if already canonical
+
+    df["value_type"] = df["value_type"].map(_norm_vtype)
     df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0.0)
     return df
 
@@ -125,39 +135,46 @@ def _sum_values(cat, opt, parents, vtype):
                 total += float(r.loc[m, "value"].sum())
     return total
 
-def _sum_overlay(cat, selected_opt, parents):
-    per_sf  = _sum_values(cat, selected_opt, parents, "per_sf") + _sum_values(cat, DEFAULT_PARENT, parents, "per_sf")
-    per_unit= _sum_values(cat, selected_opt, parents, "per_unit") + _sum_values(cat, DEFAULT_PARENT, parents, "per_unit")
-    fixed   = _sum_values(cat, selected_opt, parents, "fixed") + _sum_values(cat, DEFAULT_PARENT, parents, "fixed")
-    return per_sf, per_unit, fixed
-
-def _collect_generic_adders(product):
-    known = {"baseline_cost","mf_efficiency_factor","energy_code","finish_quality","energy_source","infrastructure","bedrooms"}
-    per_sf = per_unit = fixed = 0.0
-    r = A[~A["category"].isin(known)]
-    r = r[(r["parent_option"].isin([product, DEFAULT_PARENT])) & (r["option"].eq(DEFAULT_PARENT))]
+def _sum_values(cat, opt, parents, vtype):
+    total = 0.0
+    if opt is None: 
+        return 0.0
+    r = A[(A["category"].eq(cat)) &
+          (A["option"].eq(str(opt).lower())) &
+          (A["parent_option"].isin([p.lower() for p in parents])) &
+          (A["value_type"].eq(vtype))]
     if not r.empty:
-        per_sf  += float(r.loc[r["value_type"].eq("per_sf"), "value"].sum())
-        per_unit+= float(r.loc[r["value_type"].eq("per_unit"), "value"].sum())
-        fixed   += float(r.loc[r["value_type"].eq("fixed"), "value"].sum())
+        total += float(r["value"].sum())
+    return total
+
+def _sum_overlay(cat, selected_opt, parents):
+    per_sf  = _sum_values(cat, selected_opt, parents, "per_sf")  + _sum_values(cat, "default", parents, "per_sf")
+    per_unit= _sum_values(cat, selected_opt, parents, "per_unit")+ _sum_values(cat, "default", parents, "per_unit")
+    fixed   = _sum_values(cat, selected_opt, parents, "fixed")   + _sum_values(cat, "default", parents, "fixed")
     return per_sf, per_unit, fixed
 
 def compute_tdc(sf, htype, code, src, infra, fin):
-    base = baseline_per_sf()
-    pct  = (one_val("energy_code", code) + one_val("finish_quality", fin)) / 100.0
-    per_sf = base * (mf_factor(htype) + pct)
+    base_psf = one_val("baseline_cost","baseline")
+    mf_mult  = mf_factor(htype)
+    pct_mult = (one_val("energy_code", code) + one_val("finish_quality", fin)) / 100.0
+    core_psf = base_psf * (mf_mult + pct_mult)
 
-    parents = [htype, DEFAULT_PARENT]
+    parents = [htype, "default"]
 
     es_psf, es_pu, es_fx = _sum_overlay("energy_source", src, parents)
     in_psf, in_pu, in_fx = _sum_overlay("infrastructure", infra, parents)
-    gen_psf, gen_pu, gen_fx = _collect_generic_adders(htype)
+
+    other = A[~A["category"].isin({"baseline_cost","mf_efficiency_factor","energy_code","finish_quality","energy_source","infrastructure","bedrooms"})]
+    other = other[(other["option"].eq("default")) & (other["parent_option"].isin([htype, "default"]))]
+
+    other_psf  = float(other.loc[other["value_type"].eq("per_sf"), "value"].sum()) if not other.empty else 0.0
+    other_pu   = float(other.loc[other["value_type"].eq("per_unit"), "value"].sum()) if not other.empty else 0.0
+    other_fx   = float(other.loc[other["value_type"].eq("fixed"), "value"].sum()) if not other.empty else 0.0
 
     total = 0.0
-    total += sf * per_sf
-    total += sf * (es_psf + in_psf + gen_psf)
-    total += es_pu + in_pu + gen_pu
-    total += es_fx + in_fx + gen_fx
+    total += sf * (core_psf + es_psf + in_psf + other_psf)
+    total += es_pu + in_pu + other_pu
+    total += es_fx + in_fx + other_fx
     return total
 
 def pick_afford_col(b_int, unit_type):
@@ -326,20 +343,54 @@ def _duplicate_from_previous(i):
         "custom_label": prev.get("custom_label", "Custom"),
     }
 
+def _prime_unit_widget_keys(i):
+    """Initialize widget keys from the unit state exactly once."""
+    u = st.session_state.units[i]
+    defaults = {
+        f"pkg_{i}":  u["package"],
+        f"code_{i}": u["components"]["code"],
+        f"src_{i}":  u["components"]["src"],
+        f"infra_{i}":u["components"]["infra"],
+        f"fin_{i}":  u["components"]["fin"],
+        f"label_{i}":u.get("custom_label", "Custom"),
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+def _cb_set_package(i):
+    def _cb():
+        pkg_key = st.session_state[f"pkg_{i}"]
+        _apply_package(i, pkg_key)
+        # keep widget values in sync with the package (prevents one-run lag)
+        u = st.session_state.units[i]
+        st.session_state[f"code_{i}"]  = u["components"]["code"]
+        st.session_state[f"src_{i}"]   = u["components"]["src"]
+        st.session_state[f"infra_{i}"] = u["components"]["infra"]
+        st.session_state[f"fin_{i}"]   = u["components"]["fin"]
+    return _cb
+
+def _cb_set_component(i, field):
+    def _cb():
+        val = st.session_state[f"{field}_{i}"]
+        _update_component(i, field, val)
+    return _cb
+
 def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
+    _prime_unit_widget_keys(i)
     u = st.session_state.units[i]
     st.subheader(f"{pretty(product)} {i+1}")
     with st.container(border=True):
         cols = st.columns([1, 1], vertical_alignment="center")
         with cols[0]:
             pkg_disabled = disabled or u["is_custom"]
-            pkg_choice = st.radio(
+            st.radio(
                 "Policy package",
                 options=list(PKG.keys()),
                 format_func=lambda k: PKG[k]["label"],
-                index=list(PKG.keys()).index(u["package"]),
                 key=f"pkg_{i}",
-                disabled=pkg_disabled
+                disabled=pkg_disabled,
+                on_change=_cb_set_package(i),
             )
             if u["is_custom"] and not disabled:
                 st.caption(f"Modified from “{PKG[u['package']]['label']}”. Click “Reset to package” to change package.")
@@ -350,34 +401,48 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
                     _duplicate_from_previous(i); st.rerun()
             with c2:
                 if u["is_custom"] and st.button("Reset to package", key=f"reset_{i}", disabled=disabled):
-                    _apply_package(i, u["package"]); st.rerun()
-        if not (u["is_custom"] or disabled) and pkg_choice != u["package"]:
-            _apply_package(i, pkg_choice)
+                    _apply_package(i, u["package"])
+                    # sync widgets to package defaults immediately
+                    _prime_unit_widget_keys(i)
+                    st.rerun()
+
         with st.expander("Advanced: adjust components", expanded=False):
             opt_code  = options("energy_code", DEFAULT_PARENT) or ["vt_energy_code"]
             opt_src   = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
             opt_infra = options("infrastructure", DEFAULT_PARENT) or ["no","yes"]
             opt_fin   = options("finish_quality", DEFAULT_PARENT) or ["average","above_average","below_average"]
-            code  = st.selectbox("Energy code standard", opt_code,
-                                 index=(opt_code.index(u["components"]["code"]) if u["components"]["code"] in opt_code else 0),
-                                 format_func=pretty, key=f"code_{i}", disabled=disabled)
-            src   = st.selectbox("Energy source", opt_src,
-                                 index=(opt_src.index(u["components"]["src"]) if u["components"]["src"] in opt_src else 0),
-                                 format_func=pretty, key=f"src_{i}", disabled=disabled)
-            infra = st.selectbox("Infrastructure required?", opt_infra,
-                                 index=(opt_infra.index(u["components"]["infra"]) if u["components"]["infra"] in opt_infra else 0),
-                                 format_func=pretty, key=f"infra_{i}", disabled=disabled)
-            fin   = st.selectbox("Finish quality", opt_fin,
-                                 index=(opt_fin.index(u["components"]["fin"]) if u["components"]["fin"] in opt_fin else 0),
-                                 format_func=pretty, key=f"fin_{i}", disabled=disabled)
-            for field, val in [("code", code), ("src", src), ("infra", infra), ("fin", fin)]:
-                if val != u["components"][field]:
-                    _update_component(i, field, val)
-            if u["is_custom"]:
-                u["custom_label"] = st.text_input("Bar label", value=u.get("custom_label", "Custom"), key=f"label_{i}", disabled=disabled)
-        label = PKG[u["package"]]["label"] if not u["is_custom"] else (u.get("custom_label") or "Custom")
-    return {"label": label, "code": u["components"]["code"], "src": u["components"]["src"],
-            "infra": u["components"]["infra"], "fin": u["components"]["fin"]}
+
+            st.selectbox("Energy code standard", opt_code,
+                         format_func=pretty, key=f"code_{i}",
+                         disabled=disabled, on_change=_cb_set_component(i, "code"))
+            st.selectbox("Energy source", opt_src,
+                         format_func=pretty, key=f"src_{i}",
+                         disabled=disabled, on_change=_cb_set_component(i, "src"))
+            st.selectbox("Infrastructure required?", opt_infra,
+                         format_func=pretty, key=f"infra_{i}",
+                         disabled=disabled, on_change=_cb_set_component(i, "infra"))
+            st.selectbox("Finish quality", opt_fin,
+                         format_func=pretty, key=f"fin_{i}",
+                         disabled=disabled, on_change=_cb_set_component(i, "fin"))
+
+            if st.session_state.units[i]["is_custom"]:
+                st.session_state.units[i]["custom_label"] = st.text_input(
+                    "Bar label", value=st.session_state.get(f"label_{i}", u.get("custom_label","Custom")),
+                    key=f"label_{i}", disabled=disabled
+                )
+
+        label = (PKG[u["package"]]["label"]
+                 if not st.session_state.units[i]["is_custom"]
+                 else (st.session_state.units[i].get("custom_label") or "Custom"))
+
+    # read back the components from widget keys to ensure returned dict matches UI 1:1
+    comps = {
+        "code":  st.session_state[f"code_{i}"],
+        "src":   st.session_state[f"src_{i}"],
+        "infra": st.session_state[f"infra_{i}"],
+        "fin":   st.session_state[f"fin_{i}"],
+    }
+    return {"label": label, **comps}
 
 # ===== Header =====
 st.title("🏘️ Housing Affordability Visualizer")
