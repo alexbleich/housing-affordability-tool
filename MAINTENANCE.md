@@ -34,11 +34,13 @@ The app runs on [Streamlit Cloud](https://streamlit.io/cloud) and updates automa
 
 ## Using ChatGPT to Help
 If you need to change the Python file:
-1. Copy the part of the code you want to change (you can copy the whole script if you'd like).  
-2. Paste it into ChatGPT and ask a clear question or tell it specifically what you want.
+1. Open a new chat and use this prompt to get it to understand the context:
+   - "I’m working on a Streamlit app written in Python. The app is called Housing Affordability Visualizer. It calculates housing development costs from a CSV of assumptions and compares them to AMI affordability thresholds from VHFA tables. The code is all in one file called housing-affordability-tool.py. I don’t know Python, but I need to make small changes. I’ll paste parts of the code or CSV here, and you should show me the exact edits I need to make. My end goal is to [state your goal clearly — e.g., “add a new finish quality option,” “change the failure message,” “update the AMI values”]. Please give me concrete code or CSV rows I can copy-paste, and explain what you changed."
+2. Copy the part of the code you want to change (you can copy the whole script if you'd like).  
+3. Paste it into ChatGPT and ask a clear question or tell it specifically what you want.
    - Example: “How do I add a new finish quality option called ‘Luxury’ with a 20% adder?”  
    - Example: “I need the error message to display something different. Change it.”  
-3. If you see an error in the Streamlit app, copy the error message and paste it into ChatGPT. It will fix it for you.
+4. If you see an error in the Streamlit app, copy the error message and paste it into ChatGPT. It will fix it for you.
 
 ---
 
