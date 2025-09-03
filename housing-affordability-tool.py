@@ -466,16 +466,15 @@ if not apartment_mode and units:
     # Draw with true linked axis
     draw_chart2(labels, tdc_vals, afford_price, p2i, i2p)
 
-    # Messaging: success if ANY option is affordable (equality counts)
+        # Messaging: success if ANY option is affordable (treat equality as affordable with small tolerance)
+    any_aff = False
     if p2i is not None:
-        req_incomes = p2i(np.asarray(tdc_vals, dtype=float))
-        valid = np.isfinite(req_incomes)
-        def _affordable(ui, ri, atol=50.0):
-            return (ui >= ri) or np.isclose(ui, ri, rtol=1e-4, atol=atol)
-        any_aff = np.any(_affordable(float(user_income), req_incomes[valid]))
-    else:
-        valid = np.array([], dtype=bool)
-        any_aff = False
+        req_incomes = p2i(np.asarray(tdc_vals, dtype=float))  # array
+        r = req_incomes[np.isfinite(req_incomes)]
+        if r.size > 0:
+            ui = float(user_income)
+            # vectorized: array-or, not Python 'or'
+            any_aff = bool(np.any((ui >= r) | np.isclose(ui, r, rtol=1e-4, atol=50.0)))
 
     if any_aff:
         st.markdown(
