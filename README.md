@@ -62,7 +62,6 @@ Access the tool here: https://housing-affordability-tool.streamlit.app
 
 ## Files in This Repository
 - `data/assumptions.csv` — Policy cost assumptions (baseline $/sf, energy codes, energy sources, finish quality).  
-  *(Infrastructure entries are currently ignored in TDC.)*
 - `data/chittenden_ami.csv`, `data/addison_ami.csv`, `data/vermont_ami.csv` — VHFA purchase-price & income tables by AMI.  
   *(The app caps at 150% AMI and constrains the income input to the table’s min–max for the selected region & household size.)*
 - `housing-affordability-tool.py` — Streamlit app
