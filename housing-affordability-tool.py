@@ -420,7 +420,6 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
                     disabled=disabled
                 )
                 st.caption("Tip: rename this bar to something you’ll recognize later (e.g., “All-electric + VT code”).")
-                )
 
         # --- Infrastructure toggle (per-unit) JUST BELOW the expander ---
         current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
