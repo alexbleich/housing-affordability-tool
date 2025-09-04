@@ -300,12 +300,13 @@ def _ensure_units(n):
         st.session_state.units = []
     while len(st.session_state.units) < n:
         idx = len(st.session_state.units)
+        prod_for_label = pretty(st.session_state.get("global_product", "townhome"))
         st.session_state.units.append({
             "package": "baseline",
             "components": dict(code=PKG["baseline"]["code"], src=PKG["baseline"]["src"],
                                infra=PKG["baseline"]["infra"], fin=PKG["baseline"]["fin"]),
             "is_custom": False,
-            "custom_label": f"Custom {idx+1}",
+            "custom_label": f"{prod_for_label} {idx+1}",
         })
     if len(st.session_state.units) > n:
         st.session_state.units = st.session_state.units[:n]
@@ -330,11 +331,12 @@ def _update_component(i, field, value):
 
 def _duplicate_from_previous(i):
     prev = st.session_state.units[i-1]
+    prod_for_label = pretty(st.session_state.get("global_product", "townhome"))
     st.session_state.units[i] = {
         "package": prev["package"],
         "components": prev["components"].copy(),
         "is_custom": prev["is_custom"],
-        "custom_label": prev.get("custom_label", f"Custom {i+1}"),
+        "custom_label": prev.get("custom_label", f"{prod_for_label} {i+1}"),
     }
 
 def _prime_unit_widget_keys(i):
@@ -345,7 +347,7 @@ def _prime_unit_widget_keys(i):
         f"src_{i}":  u["components"]["src"],
         f"infra_{i}":u["components"]["infra"],
         f"fin_{i}":  u["components"]["fin"],
-        f"label_{i}":u.get("custom_label", f"Custom {i+1}"),
+        f"label_{i}": u.get("custom_label", f"{pretty(st.session_state.get('global_product', 'townhome'))} {i+1}"),
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -447,7 +449,10 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
         elif changed == ["infra"] and cur["infra"] == "yes":
             label = f"{pkg_label} w/ Infra."
         else:
-            label = st.session_state.get(f"label_{i}", st.session_state.units[i].get("custom_label", f"Custom {i+1}"))
+            label = st.session_state.get(
+                f"label_{i}",
+                st.session_state.units[i].get("custom_label", f"{pretty(product)} {i+1}")
+            )
 
     return {"label": label, **cur}
 
