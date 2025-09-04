@@ -32,7 +32,7 @@ VALID_AMIS = [30] + list(range(50, 155, 5))
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
 
-# Packages default to Infrastructure = no
+# Packages: default Infrastructure = "no"
 PKG = {
     "baseline": {"label": "Baseline",          "code": "vt_energy_code",  "src": "natural_gas", "infra": "no", "fin": "average"},
     "top":      {"label": "Top-of-the-Line",   "code": "passive_house",   "src": "geothermal",  "infra": "no", "fin": "above_average"},
@@ -102,9 +102,12 @@ def _rows(cat, opt=None, parent=None):
 
 def one_val(cat, opt, parent=None, expect_type=None, default=0.0):
     r = _rows(cat, opt, parent)
-    if r.empty and parent is not None: r = _rows(cat, opt)
-    if r.empty: return default
-    if expect_type and r.iloc[0]["value_type"] != expect_type: return default
+    if r.empty and parent is not None:
+        r = _rows(cat, opt)
+    if r.empty:
+        return default
+    if expect_type and r.iloc[0]["value_type"] != expect_type:
+        return default
     return float(r.iloc[0]["value"])
 
 def _overlay_sums(category: str, option: str, parents: list) -> tuple:
@@ -124,6 +127,7 @@ def bedroom_sf(h_type, br_label):
 def mf_factor(h_type): return one_val("mf_efficiency_factor","default",h_type)
 def baseline_per_sf(): return one_val("baseline_cost","baseline")
 
+# === TDC calculator (explicit infra per-unit by housing type) ===
 def compute_tdc(sf, htype, code, src, infra, fin):
     base_psf = baseline_per_sf()
     mf_mult  = mf_factor(htype)
@@ -132,13 +136,17 @@ def compute_tdc(sf, htype, code, src, infra, fin):
 
     parents = [htype, DEFAULT_PARENT]
 
-    es_psf, es_pu, es_fx    = _overlay_sums("energy_source", src, parents)
-    inf_psf, inf_pu, inf_fx = _overlay_sums("infrastructure", infra, parents)
+    es_psf, es_pu, es_fx = _overlay_sums("energy_source", src, parents)
 
-    # Any other default overlays (optional in your CSV)
+    # Infrastructure: use YES per-unit value for current housing type; add only if toggled on
+    infra_yes_per_unit = one_val("infrastructure", "yes", parent=htype, expect_type="per_unit", default=0.0)
+    inf_pu = infra_yes_per_unit if infra == "yes" else 0.0
+    inf_psf = 0.0
+    inf_fx  = 0.0
+
+    # Optional other overlays (safe if none exist)
     other = A[~A["category"].isin({"baseline_cost","mf_efficiency_factor","energy_code","finish_quality","energy_source","infrastructure","bedrooms"})]
     other = other[(other["option"].eq("default")) & (other["parent_option"].isin(parents))]
-
     other_psf = float(other.loc[other["value_type"].eq("per_sf"),  "value"].sum()) if not other.empty else 0.0
     other_pu  = float(other.loc[other["value_type"].eq("per_unit"),"value"].sum()) if not other.empty else 0.0
     other_fx  = float(other.loc[other["value_type"].eq("fixed"),   "value"].sum()) if not other.empty else 0.0
@@ -270,9 +278,12 @@ def _apply_package(i, pkg_key):
                            infra=PKG[pkg_key]["infra"], fin=PKG[pkg_key]["fin"])
     u["is_custom"] = False
     _set_widget_state_infra(i, PKG[pkg_key]["infra"] == "yes")
+    st.rerun()
 
 def _update_component(i, field, value):
     u = st.session_state.units[i]
+    if u["components"].get(field) == value:
+        return
     u["components"][field] = value
     p = PKG[u["package"]]
     u["is_custom"] = any([
@@ -291,6 +302,7 @@ def _duplicate_from_previous(i):
         "custom_label": prev.get("custom_label", "Custom"),
     }
     _set_widget_state_infra(i, st.session_state.units[i]["components"]["infra"] == "yes")
+    st.rerun()
 
 # ===== UI =====
 st.title("🏘️ Housing Affordability Visualizer")
@@ -306,10 +318,14 @@ product = st.radio("What kind of housing are we talking about?",
 apartment_mode = (product == "apartment")
 if not apartment_mode:
     br_opts = options("bedrooms", parent=product) or ["2"]
-    bedrooms = st.radio("Number of bedrooms",
-                        [*br_opts],
-                        index=(br_opts.index("2") if "2" in br_opts else 0),
-                        format_func=pretty, horizontal=True, key="global_bedrooms")
+    bedrooms = st.radio(
+        "Number of bedrooms",
+        [*br_opts],
+        index=(br_opts.index("2") if "2" in br_opts else 0),
+        format_func=pretty,
+        horizontal=True,
+        key="bedrooms_radio",
+    )
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
@@ -319,7 +335,14 @@ st.divider()
 
 # Step 2 — Pick your Policies
 st.header("Step 2 — Pick your Policies")
-num_units = st.radio("How many units would you like to compare?", [1,2,3,4,5], index=1, disabled=apartment_mode, horizontal=True)
+num_units = st.radio(
+    "How many units would you like to compare?",
+    [1,2,3,4,5],
+    index=1,
+    disabled=apartment_mode,
+    horizontal=True,
+    key="num_units_radio",
+)
 
 def _ensure_and_get_units():
     _ensure_units(num_units)
@@ -347,10 +370,10 @@ def render_unit_card(i: int, disabled: bool = False):
             c1, c2 = st.columns([1,1])
             with c1:
                 if i > 0 and st.button("Duplicate from previous", key=f"dup_{i}", disabled=disabled):
-                    _duplicate_from_previous(i); st.rerun()
+                    _duplicate_from_previous(i)
             with c2:
                 if u["is_custom"] and st.button("Reset to package", key=f"reset_{i}", disabled=disabled):
-                    _apply_package(i, u["package"]); st.rerun()
+                    _apply_package(i, u["package"])
 
         if not (u["is_custom"] or disabled) and pkg_choice != u["package"]:
             _apply_package(i, pkg_choice)
@@ -370,9 +393,13 @@ def render_unit_card(i: int, disabled: bool = False):
                                  index=(opt_fin.index(u["components"]["fin"]) if u["components"]["fin"] in opt_fin else 0),
                                  format_func=pretty, key=f"fin_{i}", disabled=disabled)
 
+            changed = False
             for field, val in [("code", code), ("src", src), ("fin", fin)]:
                 if val != u["components"][field]:
                     _update_component(i, field, val)
+                    changed = True
+            if changed:
+                st.rerun()
 
             if u["is_custom"]:
                 u["custom_label"] = st.text_input("Bar label", value=u.get("custom_label", "Custom"), key=f"label_{i}", disabled=disabled)
@@ -384,6 +411,8 @@ def render_unit_card(i: int, disabled: bool = False):
         infra = "yes" if (infra_toggle and "yes" in infra_allowed) else "no"
         if infra != u["components"]["infra"]:
             _update_component(i, "infra", infra)
+            _set_widget_state_infra(i, infra == "yes")
+            st.rerun()
         _set_widget_state_infra(i, infra == "yes")
 
         label = PKG[u["package"]]["label"] if not u["is_custom"] else (u.get("custom_label") or "Custom")
@@ -402,7 +431,13 @@ st.divider()
 st.header("Step 3 — Compare Costs with Affordability")
 st.subheader("Affordability Thresholds")
 with st.container(border=True):
-    n_amis = st.radio("How many Area Median Income (AMI) levels?", [1,2,3], index=0, horizontal=True)
+    n_amis = st.radio(
+        "How many Area Median Income (AMI) levels?",
+        [1,2,3],
+        index=0,
+        horizontal=True,
+        key="n_amis_radio",
+    )
     def default_ami_for_idx(i):
         return [100, 150, 80][i] if n_amis == 3 else ([100, 120][i] if n_amis == 2 else 100)
     amis = []
@@ -440,7 +475,13 @@ st.caption("Select region, household size, and income to assess affordability fo
 with st.container(border=True):
     region_list_pretty = [REGION_PRETTY[k] for k in REGIONS]
     region_single = st.selectbox("Region", region_list_pretty, index=region_list_pretty.index("Chittenden"))
-    household_size = st.radio("Select household size", list(range(1,9)), index=3, horizontal=True)
+    household_size = st.radio(
+        "Select household size",
+        list(range(1,9)),
+        index=3,
+        horizontal=True,
+        key="household_size_radio",
+    )
     user_income = st.number_input("Household income", min_value=20000, max_value=300000, step=1000, value=100000, format="%d")
     st.caption("Note: AMI capped at 150%. Inputs above 150% use 150%")
 
