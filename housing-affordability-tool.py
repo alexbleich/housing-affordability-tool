@@ -586,7 +586,8 @@ with st.container(border=True):
             key="user_income",
             format="%d",
         )
-    user_income = float(st.session_state["user_income"])
+    user_income = float(st.session_state["user_income"]
+    )
     st.caption(f"Max reflects 150% AMI for the selected region and household size (max: {fmt_money(max_income)}).")
 
 # ===== Chart 2 + Messaging =====
