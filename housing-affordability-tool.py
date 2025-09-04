@@ -110,7 +110,7 @@ def one_val(cat, opt, parent=None, expect_type=None, default=0.0):
         return default
     return float(r.iloc[0]["value"])
 
-def _overlay_sums(category: str, option: str, parents: list[str]) -> tuple[float,float,float]:
+def _overlay_sums(category: str, option: str, parents: list) -> tuple:
     df = A[(A["category"].eq(category)) & (A["option"].eq(option)) & (A["parent_option"].isin(parents))]
     if df.empty: return 0.0, 0.0, 0.0
     psf = float(pd.to_numeric(df.loc[df["value_type"].eq("per_sf"),   "value"], errors="coerce").sum())
@@ -135,8 +135,8 @@ def compute_tdc(sf, htype, code, src, infra, fin):
 
     parents = [htype, DEFAULT_PARENT]
 
-    es_psf, es_pu, es_fx = _overlay_sums("energy_source", src, parents)
-    inf_psf, inf_pu, inf_fx = _overlay_sums("infrastructure", infra, parents)
+    es_psf, es_pu, es_fx       = _overlay_sums("energy_source", src, parents)
+    inf_psf, inf_pu, inf_fx    = _overlay_sums("infrastructure", infra, parents)
 
     other = A[~A["category"].isin({"baseline_cost","mf_efficiency_factor","energy_code","finish_quality","energy_source","infrastructure","bedrooms"})]
     other = other[(other["option"].eq("default")) & (other["parent_option"].isin(parents))]
@@ -338,7 +338,7 @@ num_units = st.selectbox("How many units would you like to compare?", [1,2,3,4,5
 def _ensure_and_get_units():
     _ensure_units(num_units)
     return st.session_state.units
-units_state = _ensure_and_get_units()
+_ = _ensure_and_get_units()
 
 def render_unit_card(i: int, disabled: bool = False):
     u = st.session_state.units[i]
@@ -357,7 +357,6 @@ def render_unit_card(i: int, disabled: bool = False):
             )
             if u["is_custom"] and not disabled:
                 st.caption(f"Modified from “{PKG[u['package']]['label']}”. Click “Reset to package” to change package.")
-
         with cols[1]:
             c1, c2 = st.columns([1,1])
             with c1:
@@ -373,7 +372,6 @@ def render_unit_card(i: int, disabled: bool = False):
         with st.expander("Advanced: adjust components", expanded=False):
             opt_code  = options("energy_code", DEFAULT_PARENT) or ["vt_energy_code"]
             opt_src   = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
-            opt_infra = options("infrastructure", product) or ["no","yes"]
             opt_fin   = options("finish_quality", DEFAULT_PARENT) or ["average","above_average","below_average"]
 
             code  = st.selectbox("Energy code standard", opt_code,
@@ -382,9 +380,12 @@ def render_unit_card(i: int, disabled: bool = False):
             src   = st.selectbox("Energy source", opt_src,
                                  index=(opt_src.index(u["components"]["src"]) if u["components"]["src"] in opt_src else 0),
                                  format_func=pretty, key=f"src_{i}", disabled=disabled)
-            infra = st.selectbox("Infrastructure required?", opt_infra,
-                                 index=(opt_infra.index(u["components"]["infra"]) if u["components"]["infra"] in opt_infra else 0),
-                                 format_func=pretty, key=f"infra_{i}", disabled=disabled)
+
+            infra_allowed = set(options("infrastructure", product) or ["no","yes"])
+            current_infra_yes = (u["components"]["infra"] == "yes")
+            infra_toggle = st.toggle("Infrastructure required?", value=current_infra_yes, key=f"infra_{i}", disabled=disabled)
+            infra = "yes" if (infra_toggle and "yes" in infra_allowed) else "no"
+
             fin   = st.selectbox("Finish quality", opt_fin,
                                  index=(opt_fin.index(u["components"]["fin"]) if u["components"]["fin"] in opt_fin else 0),
                                  format_func=pretty, key=f"fin_{i}", disabled=disabled)
