@@ -380,12 +380,6 @@ def render_unit_card(i: int, disabled: bool = False):
             src   = st.selectbox("Energy source", opt_src,
                                  index=(opt_src.index(u["components"]["src"]) if u["components"]["src"] in opt_src else 0),
                                  format_func=pretty, key=f"src_{i}", disabled=disabled)
-
-            infra_allowed = set(options("infrastructure", product) or ["no","yes"])
-            current_infra_yes = (u["components"]["infra"] == "yes")
-            infra_toggle = st.toggle("Infrastructure required?", value=current_infra_yes, key=f"infra_{i}", disabled=disabled)
-            infra = "yes" if (infra_toggle and "yes" in infra_allowed) else "no"
-
             fin   = st.selectbox("Finish quality", opt_fin,
                                  index=(opt_fin.index(u["components"]["fin"]) if u["components"]["fin"] in opt_fin else 0),
                                  format_func=pretty, key=f"fin_{i}", disabled=disabled)
@@ -396,6 +390,14 @@ def render_unit_card(i: int, disabled: bool = False):
 
             if u["is_custom"]:
                 u["custom_label"] = st.text_input("Bar label", value=u.get("custom_label", "Custom"), key=f"label_{i}", disabled=disabled)
+
+        # Infrastructure toggle (below Advanced section, still inside the unit card)
+        infra_allowed = set(options("infrastructure", product) or ["no", "yes"])
+        current_infra_yes = (u["components"]["infra"] == "yes")
+        infra_toggle = st.toggle("Infrastructure required?", value=current_infra_yes, key=f"infra_{i}", disabled=disabled)
+        infra = "yes" if (infra_toggle and "yes" in infra_allowed) else "no"
+        if infra != u["components"]["infra"]:
+            _update_component(i, "infra", infra)
 
         label = PKG[u["package"]]["label"] if not u["is_custom"] else (u.get("custom_label") or "Custom")
 
