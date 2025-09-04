@@ -420,6 +420,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
                     disabled=disabled
                 )
                 st.caption("Tip: rename this bar to something you’ll recognize later (e.g., “All-electric + VT code”).")
+                )
 
         # --- Infrastructure toggle (per-unit) JUST BELOW the expander ---
         current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
@@ -434,17 +435,26 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
             st.session_state[f"infra_{i}"] = new_infra_opt
             _update_component(i, "infra", new_infra_opt)
 
-        label = (PKG[u["package"]]["label"]
-                 if not st.session_state.units[i]["is_custom"]
-                 else (st.session_state.units[i].get("custom_label") or f"Custom {i+1}"))  # << changed
+        pkg_label = PKG[u["package"]]["label"]
+        cur = {
+            "code":  st.session_state[f"code_{i}"],
+            "src":   st.session_state[f"src_{i}"],
+            "infra": st.session_state[f"infra_{i}"],
+            "fin":   st.session_state[f"fin_{i}"],
+        }
+        changed = [f for f in ("code","src","infra","fin") if cur[f] != PKG[u["package"]][f]]
 
-    comps = {
-        "code":  st.session_state[f"code_{i}"],
-        "src":   st.session_state[f"src_{i}"],
-        "infra": st.session_state[f"infra_{i}"],
-        "fin":   st.session_state[f"fin_{i}"],
-    }
-    return {"label": label, **comps}
+        if not changed:
+            # exactly the package
+            label = pkg_label
+        elif changed == ["infra"] and cur["infra"] == "yes":
+            # only infra toggled on
+            label = f"{pkg_label} w/ Infra."
+        else:
+            # any other change → Custom {i+1} (unless user typed a name)
+            label = st.session_state.get(f"label_{i}", st.session_state.units[i].get("custom_label", f"Custom {i+1}"))
+
+    return {"label": label, **cur}
 
 # ===== Header =====
 st.title("🏘️ Housing Affordability Visualizer")
