@@ -35,8 +35,8 @@ AFFORD_EPS = 0.5
 
 PKG = {
     "baseline": {"label": "Baseline", "code": "vt_energy_code", "src": "natural_gas", "infra": "no", "fin": "average"},
-    "top": {"label": "Top-of-the-Line", "code": "passive_house", "src": "geothermal", "infra": "yes", "fin": "above_average"},
-    "below": {"label": "Below Baseline", "code": "base_me_nh_code", "src": "natural_gas", "infra": "no", "fin": "below_average"},
+    "top":      {"label": "Top-of-the-Line", "code": "passive_house", "src": "geothermal", "infra": "no", "fin": "above_average"},
+    "below":    {"label": "Below Baseline", "code": "base_me_nh_code", "src": "natural_gas", "infra": "no", "fin": "below_average"},
 }
 
 # ===== Data Loading =====
@@ -122,7 +122,14 @@ def bedroom_sf(h_type, br_label):
     return float(r.iloc[0]["value"]) if not r.empty else np.nan
 
 def mf_factor(h_type): return one_val("mf_efficiency_factor","default",h_type)
+
 def baseline_per_sf(): return one_val("baseline_cost","baseline")
+
+def infra_per_unit(htype: str, opt: str) -> float:
+    return one_val("infrastructure", opt, parent=htype, expect_type="per_unit", default=0.0)
+
+def bool_to_infra_opt(b: bool) -> str:
+    return "yes" if bool(b) else "no"
 
 def _sum_values(cat, opt, parents, vtype):
     if opt is None: 
@@ -151,14 +158,15 @@ def compute_tdc(sf, htype, code, src, infra, fin):
 
     other = A[~A["category"].isin({"baseline_cost","mf_efficiency_factor","energy_code","finish_quality","energy_source","infrastructure","bedrooms"})]
     other = other[(other["option"].eq("default")) & (other["parent_option"].isin([htype, "default"]))]
-
     other_psf  = float(other.loc[other["value_type"].eq("per_sf"), "value"].sum()) if not other.empty else 0.0
     other_pu   = float(other.loc[other["value_type"].eq("per_unit"), "value"].sum()) if not other.empty else 0.0
     other_fx   = float(other.loc[other["value_type"].eq("fixed"), "value"].sum()) if not other.empty else 0.0
 
+    infra_pu = infra_per_unit(htype, infra) if infra in ("yes", "no") else 0.0
+
     total = 0.0
     total += sf * (core_psf + es_psf + other_psf)
-    total += es_pu + other_pu
+    total += es_pu + other_pu + infra_pu
     total += es_fx + other_fx
     return total
 
@@ -409,6 +417,22 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
                     key=f"label_{i}", disabled=disabled
                 )
 
+            # --- Infrastructure toggle (per-unit) just below the expander ---
+            # Keep the underlying session key "infra_{i}" as "yes"/"no" so the rest of the app stays unchanged.
+            current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
+            toggle_val = st.toggle(
+                "Include infrastructure costs for this unit",
+                value=(current_infra_opt == "yes"),
+                key=f"infra_toggle_{i}",
+                disabled=disabled,
+                help="Adds the per-unit infrastructure cost for this housing type when ON."
+            )
+            # Write back to the canonical component key and flag customization state if needed
+            new_infra_opt = bool_to_infra_opt(toggle_val)
+            if new_infra_opt != current_infra_opt:
+                st.session_state[f"infra_{i}"] = new_infra_opt
+                _update_component(i, "infra", new_infra_opt)
+        
         label = (PKG[u["package"]]["label"]
                  if not st.session_state.units[i]["is_custom"]
                  else (st.session_state.units[i].get("custom_label") or "Custom"))
@@ -547,15 +571,22 @@ with st.container(border=True):
             st.session_state.user_income = int(np.clip(st.session_state.user_income, min_income, max_income))
 
     st.number_input(
-        "Household income",
-        min_value=min_income,
-        max_value=max_income,
-        step=1000,
-        value=int(st.session_state.user_income),
-        key="user_income",
-        format="%d",
-    )
-    user_income = float(st.session_state.user_income)
+        default_income = int(np.clip(100000, min_income, max_income))
+        if "user_income" not in st.session_state:
+            st.session_state["user_income"] = default_income
+        else:
+            st.session_state["user_income"] = int(np.clip(st.session_state["user_income"], min_income, max_income))
+
+        # Create the widget WITHOUT a 'value=' argument (Streamlit will use session_state["user_income"])
+        st.number_input(
+            "Household income",
+            min_value=min_income,
+            max_value=max_income,
+            step=1000,
+            key="user_income",
+            format="%d",
+        )
+    user_income = float(st.session_state["user_income"])
     st.caption(f"Max reflects 150% AMI for the selected region and household size (max: {fmt_money(max_income)}).")
 
 # ===== Chart 2 + Messaging =====
