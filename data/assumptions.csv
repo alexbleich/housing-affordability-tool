@@ -20,7 +20,7 @@ energy_code,default,passive_house,percent,20,%
 energy_source,default,natural_gas,per_sf,0,$/sf
 energy_source,default,all_electric,per_sf,0,$/sf
 energy_source,default,geothermal,per_sf,12.5,$/sf
-infrastructure,default,yes,per_unit,25000,$/sf
+infrastructure,default,yes,per_unit,25000,$
 infrastructure,default,no,per_unit,0,$
 finish_quality,default,above_average,percent,5,%
 finish_quality,default,average,percent,0,%
