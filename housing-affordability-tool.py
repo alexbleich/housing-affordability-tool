@@ -417,22 +417,20 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
                     key=f"label_{i}", disabled=disabled
                 )
 
-            # --- Infrastructure toggle (per-unit) just below the expander ---
-            # Keep the underlying session key "infra_{i}" as "yes"/"no" so the rest of the app stays unchanged.
-            current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
-            toggle_val = st.toggle(
-                "Include infrastructure costs for this unit",
-                value=(current_infra_opt == "yes"),
-                key=f"infra_toggle_{i}",
-                disabled=disabled,
-                help="Adds the per-unit infrastructure cost for this housing type when ON."
-            )
-            # Write back to the canonical component key and flag customization state if needed
-            new_infra_opt = bool_to_infra_opt(toggle_val)
-            if new_infra_opt != current_infra_opt:
-                st.session_state[f"infra_{i}"] = new_infra_opt
-                _update_component(i, "infra", new_infra_opt)
-        
+        # --- Infrastructure toggle (per-unit) JUST BELOW the expander ---
+        current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
+        toggle_val = st.toggle(
+            "Include infrastructure costs for this unit",
+            value=(current_infra_opt == "yes"),
+            key=f"infra_toggle_{i}",
+            disabled=disabled,
+            help="Adds the per-unit infrastructure cost for this housing type when ON."
+        )
+        new_infra_opt = bool_to_infra_opt(toggle_val)
+        if new_infra_opt != current_infra_opt:
+            st.session_state[f"infra_{i}"] = new_infra_opt
+            _update_component(i, "infra", new_infra_opt)
+
         label = (PKG[u["package"]]["label"]
                  if not st.session_state.units[i]["is_custom"]
                  else (st.session_state.units[i].get("custom_label") or "Custom"))
@@ -564,30 +562,23 @@ with st.container(border=True):
     else:
         min_income, max_income = 20000, 300000
 
+    # Initialize & clamp BEFORE creating the widget
+    default_income = int(np.clip(100000, min_income, max_income))
     if "user_income" not in st.session_state:
-        st.session_state.user_income = int(np.clip(100000, min_income, max_income))
+        st.session_state["user_income"] = default_income
     else:
-        if st.session_state.user_income < min_income or st.session_state.user_income > max_income:
-            st.session_state.user_income = int(np.clip(st.session_state.user_income, min_income, max_income))
+        st.session_state["user_income"] = int(np.clip(st.session_state["user_income"], min_income, max_income))
 
+    # Create the widget WITHOUT 'value=' so it uses session_state
     st.number_input(
-        default_income = int(np.clip(100000, min_income, max_income))
-        if "user_income" not in st.session_state:
-            st.session_state["user_income"] = default_income
-        else:
-            st.session_state["user_income"] = int(np.clip(st.session_state["user_income"], min_income, max_income))
-
-        # Create the widget WITHOUT a 'value=' argument (Streamlit will use session_state["user_income"])
-        st.number_input(
-            "Household income",
-            min_value=min_income,
-            max_value=max_income,
-            step=1000,
-            key="user_income",
-            format="%d",
-        )
-    user_income = float(st.session_state["user_income"]
+        "Household income",
+        min_value=min_income,
+        max_value=max_income,
+        step=1000,
+        key="user_income",
+        format="%d",
     )
+    user_income = float(st.session_state["user_income"])
     st.caption(f"Max reflects 150% AMI for the selected region and household size (max: {fmt_money(max_income)}).")
 
 # ===== Chart 2 + Messaging =====
