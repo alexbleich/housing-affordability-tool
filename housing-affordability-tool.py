@@ -344,6 +344,7 @@ def render_unit_card(i: int, disabled: bool = False):
     u = st.session_state.units[i]
     st.subheader(f"{pretty(product)} {i+1}")
     with st.container(border=True):
+        # Package selection + actions
         cols = st.columns([1, 1], vertical_alignment="center")
         with cols[0]:
             pkg_disabled = disabled or u["is_custom"]
@@ -358,51 +359,73 @@ def render_unit_card(i: int, disabled: bool = False):
             if u["is_custom"] and not disabled:
                 st.caption(f"Modified from “{PKG[u['package']]['label']}”. Click “Reset to package” to change package.")
         with cols[1]:
-            c1, c2 = st.columns([1,1])
+            c1, c2 = st.columns([1, 1])
             with c1:
                 if i > 0 and st.button("Duplicate from previous", key=f"dup_{i}", disabled=disabled):
-                    _duplicate_from_previous(i); st.rerun()
+                    _duplicate_from_previous(i)
+                    st.rerun()
             with c2:
                 if u["is_custom"] and st.button("Reset to package", key=f"reset_{i}", disabled=disabled):
-                    _apply_package(i, u["package"]); st.rerun()
+                    _apply_package(i, u["package"])
+                    st.rerun()
 
+        # Apply package change (only when not custom and not disabled)
         if not (u["is_custom"] or disabled) and pkg_choice != u["package"]:
             _apply_package(i, pkg_choice)
 
+        # Advanced component adjustments (code/src/fin only)
         with st.expander("Advanced: adjust components", expanded=False):
-            opt_code  = options("energy_code", DEFAULT_PARENT) or ["vt_energy_code"]
-            opt_src   = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
-            opt_fin   = options("finish_quality", DEFAULT_PARENT) or ["average","above_average","below_average"]
+            opt_code = options("energy_code", DEFAULT_PARENT) or ["vt_energy_code"]
+            opt_src  = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
+            opt_fin  = options("finish_quality", DEFAULT_PARENT) or ["average", "above_average", "below_average"]
 
-            code  = st.selectbox("Energy code standard", opt_code,
-                                 index=(opt_code.index(u["components"]["code"]) if u["components"]["code"] in opt_code else 0),
-                                 format_func=pretty, key=f"code_{i}", disabled=disabled)
-            src   = st.selectbox("Energy source", opt_src,
-                                 index=(opt_src.index(u["components"]["src"]) if u["components"]["src"] in opt_src else 0),
-                                 format_func=pretty, key=f"src_{i}", disabled=disabled)
-            fin   = st.selectbox("Finish quality", opt_fin,
-                                 index=(opt_fin.index(u["components"]["fin"]) if u["components"]["fin"] in opt_fin else 0),
-                                 format_func=pretty, key=f"fin_{i}", disabled=disabled)
+            code = st.selectbox(
+                "Energy code standard", opt_code,
+                index=(opt_code.index(u["components"]["code"]) if u["components"]["code"] in opt_code else 0),
+                format_func=pretty, key=f"code_{i}", disabled=disabled
+            )
+            src = st.selectbox(
+                "Energy source", opt_src,
+                index=(opt_src.index(u["components"]["src"]) if u["components"]["src"] in opt_src else 0),
+                format_func=pretty, key=f"src_{i}", disabled=disabled
+            )
+            fin = st.selectbox(
+                "Finish quality", opt_fin,
+                index=(opt_fin.index(u["components"]["fin"]) if u["components"]["fin"] in opt_fin else 0),
+                format_func=pretty, key=f"fin_{i}", disabled=disabled
+            )
 
-            for field, val in [("code", code), ("src", src), ("infra", infra), ("fin", fin)]:
+            for field, val in [("code", code), ("src", src), ("fin", fin)]:
                 if val != u["components"][field]:
                     _update_component(i, field, val)
 
             if u["is_custom"]:
-                u["custom_label"] = st.text_input("Bar label", value=u.get("custom_label", "Custom"), key=f"label_{i}", disabled=disabled)
+                u["custom_label"] = st.text_input(
+                    "Bar label", value=u.get("custom_label", "Custom"),
+                    key=f"label_{i}", disabled=disabled
+                )
 
-        # Infrastructure toggle (below Advanced section, still inside the unit card)
+        # Infrastructure toggle (placed below Advanced, still inside the card)
         infra_allowed = set(options("infrastructure", product) or ["no", "yes"])
         current_infra_yes = (u["components"]["infra"] == "yes")
-        infra_toggle = st.toggle("Infrastructure required?", value=current_infra_yes, key=f"infra_{i}", disabled=disabled)
+        infra_toggle = st.toggle(
+            "Infrastructure required?", value=current_infra_yes,
+            key=f"infra_{i}", disabled=disabled
+        )
         infra = "yes" if (infra_toggle and "yes" in infra_allowed) else "no"
         if infra != u["components"]["infra"]:
             _update_component(i, "infra", infra)
 
+        # Final label for the bar
         label = PKG[u["package"]]["label"] if not u["is_custom"] else (u.get("custom_label") or "Custom")
 
-    return {"label": label, "code": u["components"]["code"], "src": u["components"]["src"],
-            "infra": u["components"]["infra"], "fin": u["components"]["fin"]}
+    return {
+        "label": label,
+        "code": u["components"]["code"],
+        "src": u["components"]["src"],
+        "infra": u["components"]["infra"],
+        "fin": u["components"]["fin"],
+    }
 
 units = []
 for i in range(num_units):
