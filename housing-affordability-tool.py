@@ -148,18 +148,23 @@ def compute_tdc(sf, htype, code, src, infra, fin):
 
     parents = [htype, "default"]
 
+    # energy source overlays (your existing pattern)
     es_psf, es_pu, es_fx = _sum_overlay("energy_source", src, parents)
 
+    # per-unit infrastructure add (25k when "yes", 0 when "no")
+    infra_pu = one_val("infrastructure", infra, "default", expect_type="per_unit", default=0.0)
+
+    # everything else (still excluding infrastructure so we don't double count)
     other = A[~A["category"].isin({"baseline_cost","mf_efficiency_factor","energy_code","finish_quality","energy_source","infrastructure","bedrooms"})]
     other = other[(other["option"].eq("default")) & (other["parent_option"].isin([htype, "default"]))]
 
-    other_psf  = float(other.loc[other["value_type"].eq("per_sf"), "value"].sum()) if not other.empty else 0.0
-    other_pu   = float(other.loc[other["value_type"].eq("per_unit"), "value"].sum()) if not other.empty else 0.0
-    other_fx   = float(other.loc[other["value_type"].eq("fixed"), "value"].sum()) if not other.empty else 0.0
+    other_psf = float(other.loc[other["value_type"].eq("per_sf"),  "value"].sum()) if not other.empty else 0.0
+    other_pu  = float(other.loc[other["value_type"].eq("per_unit"),"value"].sum()) if not other.empty else 0.0
+    other_fx  = float(other.loc[other["value_type"].eq("fixed"),  "value"].sum()) if not other.empty else 0.0
 
     total = 0.0
     total += sf * (core_psf + es_psf + other_psf)
-    total += es_pu + other_pu
+    total += es_pu + other_pu + infra_pu
     total += es_fx + other_fx
     return total
 
