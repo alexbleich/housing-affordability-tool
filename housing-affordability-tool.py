@@ -299,12 +299,13 @@ def _ensure_units(n):
     if "units" not in st.session_state:
         st.session_state.units = []
     while len(st.session_state.units) < n:
+        idx = len(st.session_state.units)
         st.session_state.units.append({
             "package": "baseline",
             "components": dict(code=PKG["baseline"]["code"], src=PKG["baseline"]["src"],
                                infra=PKG["baseline"]["infra"], fin=PKG["baseline"]["fin"]),
             "is_custom": False,
-            "custom_label": "Custom",
+            "custom_label": f"Custom {idx+1}",
         })
     if len(st.session_state.units) > n:
         st.session_state.units = st.session_state.units[:n]
@@ -344,7 +345,7 @@ def _prime_unit_widget_keys(i):
         f"src_{i}":  u["components"]["src"],
         f"infra_{i}":u["components"]["infra"],
         f"fin_{i}":  u["components"]["fin"],
-        f"label_{i}":u.get("custom_label", "Custom"),
+        f"label_{i}":u.get("custom_label", f"Custom {i+1}"),  # << changed
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -413,18 +414,21 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
 
             if st.session_state.units[i]["is_custom"]:
                 st.session_state.units[i]["custom_label"] = st.text_input(
-                    "Bar label", value=st.session_state.get(f"label_{i}", u.get("custom_label","Custom")),
-                    key=f"label_{i}", disabled=disabled
+                    "Bar label",
+                    value=st.session_state.get(f"label_{i}", u.get("custom_label", f"Custom {i+1}")),  # << default numbered
+                    key=f"label_{i}",
+                    disabled=disabled
+                )
+                st.caption("Tip: rename this bar to something you’ll recognize later (e.g., “All-electric + VT code”).")
                 )
 
         # --- Infrastructure toggle (per-unit) JUST BELOW the expander ---
         current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
         toggle_val = st.toggle(
-            "Include infrastructure costs for this unit",
+            "Infrastructure required?",                 # << label changed
             value=(current_infra_opt == "yes"),
             key=f"infra_toggle_{i}",
-            disabled=disabled,
-            help="Adds the per-unit infrastructure cost for this housing type when ON."
+            disabled=disabled
         )
         new_infra_opt = bool_to_infra_opt(toggle_val)
         if new_infra_opt != current_infra_opt:
@@ -433,7 +437,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
 
         label = (PKG[u["package"]]["label"]
                  if not st.session_state.units[i]["is_custom"]
-                 else (st.session_state.units[i].get("custom_label") or "Custom"))
+                 else (st.session_state.units[i].get("custom_label") or f"Custom {i+1}"))  # << changed
 
     comps = {
         "code":  st.session_state[f"code_{i}"],
