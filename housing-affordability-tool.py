@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 from dataclasses import dataclass
 
+
 # ===== Constants & Files =====
 @dataclass(frozen=True)
 class Paths:
