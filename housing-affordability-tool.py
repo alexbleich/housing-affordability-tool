@@ -334,7 +334,7 @@ def _duplicate_from_previous(i):
         "package": prev["package"],
         "components": prev["components"].copy(),
         "is_custom": prev["is_custom"],
-        "custom_label": prev.get("custom_label", "Custom"),
+        "custom_label": prev.get("custom_label", f"Custom {i+1}"),
     }
 
 def _prime_unit_widget_keys(i):
@@ -345,7 +345,7 @@ def _prime_unit_widget_keys(i):
         f"src_{i}":  u["components"]["src"],
         f"infra_{i}":u["components"]["infra"],
         f"fin_{i}":  u["components"]["fin"],
-        f"label_{i}":u.get("custom_label", f"Custom {i+1}"),  # << changed
+        f"label_{i}":u.get("custom_label", f"Custom {i+1}"),
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -415,16 +415,15 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
             if st.session_state.units[i]["is_custom"]:
                 st.session_state.units[i]["custom_label"] = st.text_input(
                     "Bar label",
-                    value=st.session_state.get(f"label_{i}", u.get("custom_label", f"Custom {i+1}")),  # << default numbered
+                    value=st.session_state.get(f"label_{i}", u.get("custom_label", f"Custom {i+1}")),
                     key=f"label_{i}",
                     disabled=disabled
                 )
                 st.caption("Tip: rename this bar to something you’ll recognize later (e.g., “All-electric + VT code”).")
 
-        # --- Infrastructure toggle (per-unit) JUST BELOW the expander ---
         current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
         toggle_val = st.toggle(
-            "Infrastructure required?",                 # << label changed
+            "Infrastructure required?",
             value=(current_infra_opt == "yes"),
             key=f"infra_toggle_{i}",
             disabled=disabled
@@ -444,13 +443,10 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
         changed = [f for f in ("code","src","infra","fin") if cur[f] != PKG[u["package"]][f]]
 
         if not changed:
-            # exactly the package
             label = pkg_label
         elif changed == ["infra"] and cur["infra"] == "yes":
-            # only infra toggled on
             label = f"{pkg_label} w/ Infra."
         else:
-            # any other change → Custom {i+1} (unless user typed a name)
             label = st.session_state.get(f"label_{i}", st.session_state.units[i].get("custom_label", f"Custom {i+1}"))
 
     return {"label": label, **cur}
@@ -574,14 +570,12 @@ with st.container(border=True):
     else:
         min_income, max_income = 20000, 300000
 
-    # Initialize & clamp BEFORE creating the widget
     default_income = int(np.clip(100000, min_income, max_income))
     if "user_income" not in st.session_state:
         st.session_state["user_income"] = default_income
     else:
         st.session_state["user_income"] = int(np.clip(st.session_state["user_income"], min_income, max_income))
 
-    # Create the widget WITHOUT 'value=' so it uses session_state
     st.number_input(
         "Household income",
         min_value=min_income,
