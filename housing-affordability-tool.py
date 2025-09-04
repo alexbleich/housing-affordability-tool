@@ -518,7 +518,7 @@ with st.container(border=True):
     def default_ami_for_idx(i):
         defaults3 = [100, 150, 80]
         if n_amis == 3: return defaults3[i]
-        return [100, 120][i] if n_amis == 2 else 100
+        return [100, 150][i] if n_amis == 2 else 100
     amis = []
     for i in range(n_amis):
         ami_val = st.selectbox(
