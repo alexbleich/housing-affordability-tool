@@ -559,7 +559,7 @@ with st.container(border=True):
 
     if not apartment_mode:
         reg_key_bounds = PRETTY2REG[region_single]
-        p2i_b, i2p_b, inc_min_b, inc_max_b, _, _ = build_price_income_transformers(
+        _, _, inc_min_b, inc_max_b, *_ = build_price_income_transformers(
             reg_key_bounds, int(household_size), int(bedrooms)
         )
         if all(v is not None and np.isfinite(v) for v in (inc_min_b, inc_max_b)):
@@ -591,7 +591,7 @@ with st.container(border=True):
 if not apartment_mode and units:
     st.subheader("What These Costs Mean for Your Constituents")
     reg_key = PRETTY2REG[region_single]
-    p2i, i2p, inc_min, inc_max, price_min, price_max = build_price_income_transformers(reg_key, int(household_size), int(bedrooms))
+    p2i, i2p, *_ = build_price_income_transformers(reg_key, int(household_size), int(bedrooms))
 
     if p2i is None or i2p is None:
         st.warning("Not enough data to build the price↔income mapping for this selection.")
