@@ -579,7 +579,7 @@ with st.container(border=True):
         format="%d",
     )
     user_income = float(st.session_state["user_income"])
-    st.caption(f"Max reflects 150% AMI for the selected region and household size (max: {fmt_money(max_income)}).")
+    st.caption(f"Maximum household income input is 150% of AMI for the selected region and household size ({fmt_money(max_income)}).")
 
 # ===== Chart 2 + Messaging =====
 if not apartment_mode and units:
