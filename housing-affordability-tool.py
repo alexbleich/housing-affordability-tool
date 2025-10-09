@@ -46,17 +46,17 @@ def load_assumptions(p: Path) -> pd.DataFrame:
         st.error(f"Missing assumptions file: {p}"); st.stop()
     df = pd.read_csv(p)
     df.columns = df.columns.str.strip().str.lower()
-    must_have = {"category","parent_option","option","value_type","unit","value"}
+    must_have = {"category","parent_option","option","value_type","value"}
     missing = must_have - set(df.columns)
     if missing:
         st.error(f"Assumptions CSV missing columns: {missing}"); st.stop()
-    for c in ("category","parent_option","option","value_type","unit"):
+    for c in ("category","parent_option","option","value_type"):
         df[c] = df[c].astype(str).str.strip().str.lower()
 
     def _norm_vtype(s: str) -> str:
         t = s.replace("_","").replace("-","").replace(" ","")
         if t in {"persf","psf","sf"}: return "per_sf"
-        if t in {"perunit","unit"}:   return "per_unit"
+        if t in {"perunit"}:   return "per_unit"
         if t in {"fixed","flat","lump","fixedcost"}: return "fixed"
         return s if s in {"per_sf","per_unit","fixed"} else s
 
