@@ -8,6 +8,17 @@ from matplotlib.ticker import FuncFormatter, MaxNLocator
 from dataclasses import dataclass
 import re
 
+# ——— UI tweaks: bigger prompts + more space between radio options ———
+st.markdown("""
+<style>
+/* Larger prompt text blocks */
+.big-prompt { font-size: 1.15rem; font-weight: 600; line-height: 1.4; margin: 0.25rem 0 0.35rem; }
+
+/* More separation between vertical radio options (housing type) */
+div[data-testid="stRadio"] > div[role="radiogroup"] { row-gap: 0.55rem; }
+</style>
+""", unsafe_allow_html=True)
+
 # ===== Constants & Files =====
 @dataclass(frozen=True)
 class Paths:
@@ -449,30 +460,43 @@ st.write("")
 
 # ===== Step 1 – Choose the Housing Type =====
 st.header("Step 1 – Choose the Housing Type")
-# Store previous product to fix default labels on change
+
+# Keep track of product changes so default bar labels update correctly elsewhere
 prev_prod = st.session_state.get("global_product_prev", "townhome")
+
+# Big, readable prompt above the radio (hide the radio's own label)
+st.markdown('<div class="big-prompt">What kind of housing are we talking about?</div>', unsafe_allow_html=True)
 product = st.radio(
-    "What kind of housing are we talking about?",
-    ["townhome","condo","apartment"],
-    format_func=pretty, horizontal=False, key="global_product"
+    label=" ",
+    options=["townhome","condo","apartment"],
+    format_func=pretty,
+    horizontal=False,
+    key="global_product",
+    label_visibility="collapsed",
 )
 
+# If the user switches product, we can fix default bar labels later (Step 2)
 if product != prev_prod:
     _maybe_update_labels_on_product_change(prev_prod, product)
     st.session_state["global_product_prev"] = product
 
 apartment_mode = (product == "apartment")
 
-# Bedrooms: horizontal, fixed ranges
+# Bedrooms prompt + radios
 if not apartment_mode:
-    if product == "townhome":
-        br_opts = ["1","2","3","4"]
-    elif product == "condo":
-        br_opts = ["1","2","3"]
-    else:
-        br_opts = ["2"]  # safety
-    bedrooms = st.radio("Number of bedrooms", br_opts, index=br_opts.index("2") if "2" in br_opts else 0,
-                        format_func=pretty, horizontal=True, key="global_bedrooms")
+    # Fixed ranges per your spec
+    br_opts = ["1","2","3","4"] if product == "townhome" else ["1","2","3"]
+
+    st.markdown('<div class="big-prompt">Number of bedrooms</div>', unsafe_allow_html=True)
+    bedrooms = st.radio(
+        label=" ",
+        options=br_opts,
+        index=br_opts.index("2") if "2" in br_opts else 0,
+        format_func=pretty,
+        horizontal=True,                  # bedrooms are horizontal
+        key="global_bedrooms",
+        label_visibility="collapsed",
+    )
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
