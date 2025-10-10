@@ -432,11 +432,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 st.write("")
+st.divider()
 
 # ===== Step 1 – Choose the Housing Type =====
 st.header("Step 1 – Choose the Housing Type")
 prev_prod = st.session_state.get("global_product_prev", "townhome")
-st.markdown("**What kind of housing are we talking about?**")
+st.write("**What kind of housing are we talking about?**")
 product = st.radio(" ", ["townhome","condo","apartment"], format_func=pretty,
                    horizontal=False, key="global_product", label_visibility="collapsed")
 
@@ -444,11 +445,11 @@ if product != prev_prod:
     _maybe_update_labels_on_product_change(prev_prod, product)
     st.session_state["global_product_prev"] = product
 
-st.write("")  # tiny gap
+st.write("")
 apartment_mode = (product == "apartment")
 
 if not apartment_mode:
-    st.markdown("**Number of bedrooms**")
+    st.write("**Number of bedrooms**")
     br_opts = ["1","2","3","4"] if product == "townhome" else ["1","2","3"]
     bedrooms = st.radio(" ", br_opts, index=br_opts.index("2") if "2" in br_opts else 0,
                         format_func=pretty, horizontal=True, key="global_bedrooms",
