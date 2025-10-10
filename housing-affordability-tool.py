@@ -535,7 +535,7 @@ user_income = float(st.session_state["user_income"])
 # Note 1 (grey) + spacer
 st.caption(
     f"Minimum/maximum income allowed for this household size: "
-    f"{fmt_money(min_income)} – {fmt_money(max_income)}"
+    f"{fmt_money(min_income)} – {fmt_money(max_income)}")
 st.write("Note - *Statewide Median Household Income: $85,000*")
 
 st.subheader("Let’s see how you did!")
