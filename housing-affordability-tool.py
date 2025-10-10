@@ -124,7 +124,7 @@ def pretty(x: str) -> str:
     return t
 
 def field_label(bold_text: str, rest: str = ""):
-   lead = bold_text if bold_text.endswith(":") else f"{bold_text}:"
+    lead = bold_text if bold_text.endswith(":") else f"{bold_text}:"
     st.markdown(
         f'<div class="field-label"><span class="lead">{lead}</span> {rest}</div>',
         unsafe_allow_html=True
