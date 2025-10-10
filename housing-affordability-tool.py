@@ -79,24 +79,10 @@ A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
 
 # ===== Helpers =====
-st.markdown("""
-<style>
-/* Only affect radio option labels (not the whole app) */
-div[data-testid="stRadio"] label span {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace !important;
-  white-space: pre;  /* preserve spaces so our padding works */
-}
-</style>
-""", unsafe_allow_html=True)
-
-def _pad(name: str, width: int = 11) -> str:
-    return name.ljust(width, " ")
-
-ARROW = "  →  "
 PRETTY_OVERRIDES = {
-    "townhome":  f"{_pad('Townhome')}{ARROW}(ownership; individual entrance; generally larger than a condo)",
-    "condo":     f"{_pad('Condo')}{ARROW}(ownership; entrance from a common corridor; generally smaller than a townhome)",
-    "apartment": f"{_pad('Apartment')}{ARROW}(rental; entrance from a common corridor; generally smaller than condo/townhome)",
+    "townhome":"Townhome → (ownership; individual entrance; generally larger than a condo)",
+    "condo":"Condo → (ownership; entrance from a common corridor; generally smaller than a townhome)",
+    "apartment":"Apartment → (rental; entrance from a common corridor; generally smaller than condo/townhome)",
     "studio":"Studio",
     "vt_energy_code":"Regionally standard energy code",
     "rbes":"Vermont’s 2024 RBES code (Residential Building Energy Standard)",
