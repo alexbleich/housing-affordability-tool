@@ -410,14 +410,11 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
                      on_change=lambda: _update_component(i, "fin", st.session_state[f"fin_{i}"]))
 
         # ---- Location toggle (no extra spacer) ----
-        st.markdown("**Location:** In a new neighborhood")
         current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
         toggle_val = st.toggle(
-            " ", value=(current_infra_opt == "yes"),
-            key=f"infra_toggle_{i}",
-            label_visibility="collapsed",
-            disabled=disabled
-        )
+            "**Location:** In a new neighborhood",
+            value=(current_infra_opt == "yes"),
+            key=f"infra_toggle_{i}",)
         new_infra_opt = bool_to_infra_opt(toggle_val)
         if new_infra_opt != current_infra_opt:
             st.session_state[f"infra_{i}"] = new_infra_opt
@@ -457,13 +454,12 @@ st.header("Step 1 – Choose the Housing Type")
 
 prev_prod = st.session_state.get("global_product_prev", "townhome")
 
-st.markdown("**What kind of housing are we talking about?**")
 product = st.radio(
-    " ", ["townhome","condo","apartment"],
+    "**What kind of housing are we talking about?**",
+    ["townhome","condo","apartment"],
     format_func=pretty,
     horizontal=False,
     key="global_product",
-    label_visibility="collapsed",
 )
 
 if product != prev_prod:
@@ -473,16 +469,14 @@ if product != prev_prod:
 apartment_mode = (product == "apartment")
 
 if not apartment_mode:
-    st.markdown("**Number of bedrooms**")
     br_opts = ["1","2","3","4"] if product == "townhome" else ["1","2","3"]
     bedrooms = st.radio(
-        " ", br_opts,
+        "**Number of bedrooms**",
+        br_opts,
         index=br_opts.index("2") if "2" in br_opts else 0,
         format_func=pretty,
         horizontal=True,
-        key="global_bedrooms",
-        label_visibility="collapsed",
-    )
+        key="global_bedrooms",)
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
@@ -509,13 +503,10 @@ st.divider()
 # ===== Step 3 – Who can afford this home? =====
 st.header("Step 3 – Who can afford this home?")
 
-# Make this prompt match Step-1 style (bold line immediately above radio)
-st.markdown("**Select household size**")
 household_size = st.radio(
-    " ", list(range(1, 9)),
-    index=3, horizontal=True, key="household_size",
-    label_visibility="collapsed"
-)
+    "**Select household size**",
+    list(range(1, 9)),
+    index=3, horizontal=True, key="household_size",)
 
 # Bounds from Chittenden mapping for selected bedrooms
 if not apartment_mode and bedrooms is not None:
@@ -542,9 +533,9 @@ st.number_input(
 user_income = float(st.session_state["user_income"])
 
 # Note 1 (grey) + spacer
-st.write(f"Minimum/maximum income allowed for this household size: {fmt_money(min_income)} to {fmt_money(max_income)}")
-st.write("")
-
+st.caption(
+    f"Minimum/maximum income allowed for this household size: "
+    f"{fmt_money(min_income)} – {fmt_money(max_income)}"
 st.write("Note - *Statewide Median Household Income: $85,000*")
 
 st.subheader("Let’s see how you did!")
@@ -639,15 +630,12 @@ if show_results:
 
             # ===== Compare controls =====
             st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
-            st.markdown("**How many homes do you want to build?**")
-            compare_labels = {1: "1 home (current setting)", 2: "2 homes", 3: "3 homes"}
             compare_choice = st.radio(
-                " ",
+                "**How many homes do you want to build?**",
                 [1, 2, 3],
-                index={1: 0, 2: 1, 3: 2}[st.session_state.num_units],
+                index={1:0, 2:1, 3:2}[st.session_state.num_units],
                 horizontal=True,
-                label_visibility="collapsed",
-                format_func=lambda n: compare_labels[n],
+                format_func=lambda n: {1:"1 home (current setting)", 2:"2 homes", 3:"3 homes"}[n],
             )
             if compare_choice != st.session_state.num_units:
                 st.session_state.num_units = compare_choice
