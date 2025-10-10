@@ -93,6 +93,8 @@ PRETTY_OVERRIDES = {
     "below_average":"Below Average","average":"Average","above_average":"Above Average",
     "yes":"Yes","no":"No",
 }
+
+PRODUCT_SHORT = {"townhome": "Townhome", "condo": "Condo", "apartment": "Apartment"}
 TOKEN_UPPER = {" Ami":" AMI"," Vt ":" VT "," Nh ":" NH "," Me ":" ME "," Evt ":" EVT "," Mf ":" MF "}
 
 # ---- Step-1 vertical radio button spacing ----
@@ -123,12 +125,14 @@ def pretty(x: str) -> str:
     for k, v in TOKEN_UPPER.items(): t = t.replace(k, v)
     return t
 
+def pretty_short(x: str) -> str:
+    return PRODUCT_SHORT.get(str(x).lower().strip(), str(x).title())
+
 def field_label(lead_text: str, rest: str = ""):
     lead = lead_text.rstrip(":")
     st.markdown(
         f'<div class="field-label"><span class="lead">{lead}</span>: {rest}</div>',
-        unsafe_allow_html=True
-    )
+        unsafe_allow_html=True)
 
 def fmt_money(x):
     val = pd.to_numeric(x, errors="coerce")
@@ -348,7 +352,7 @@ def _ensure_units(n, product_key="townhome"):
         st.session_state.units = []
     while len(st.session_state.units) < n:
         idx = len(st.session_state.units)
-        prod_for_label = pretty(product_key)
+        prod_for_label = pretty_short(st.session_state.get("global_product", "townhome"))
         st.session_state.units.append({
             "components": DEFAULT_COMPONENTS.copy(),
             "custom_label": f"{prod_for_label} {idx+1}",
@@ -380,12 +384,15 @@ def _update_component(i, field, value):
     st.session_state.units[i]["components"][field] = value
 
 def _maybe_update_labels_on_product_change(old_prod: str, new_prod: str):
-    """If a label equals the old default like 'Townhome 1', update it to the new default."""
-    if "units" not in st.session_state: return
+    """If a label equals the old default (long or short form), update to the new short default."""
+    if "units" not in st.session_state: 
+        return
     for idx, u in enumerate(st.session_state.units):
-        old_default = f"{pretty(old_prod)} {idx+1}"
-        if u.get("custom_label", "") == old_default:
-            new_default = f"{pretty(new_prod)} {idx+1}"
+        old_default_short = f"{pretty_short(old_prod)} {idx+1}"
+        old_default_long  = f"{pretty(old_prod)} {idx+1}"
+        current = u.get("custom_label", "")
+        if current in (old_default_short, old_default_long):
+            new_default = f"{pretty_short(new_prod)} {idx+1}"
             st.session_state.units[idx]["custom_label"] = new_default
             st.session_state[f"label_{idx}"] = new_default
 
@@ -465,7 +472,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
         # ---- Advanced components ----
         with st.expander("Advanced components", expanded=False):
             # Extras live in data (e.g., Solar, Covered Parking)
-            default_label = f"{pretty(product)} {i+1}"
+            default_label = f"{pretty_short(product)} {i+1}"
             if not st.session_state.get(f"label_{i}"):
                 st.session_state[f"label_{i}"] = st.session_state.units[i].get("custom_label", default_label)
 
@@ -480,7 +487,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
             st.caption("Extras configured in data when available (e.g., Solar, Covered Parking).")
 
     # Final label to use
-    label = st.session_state.units[i].get("custom_label", f"{pretty(product)} {i+1}")
+    label = st.session_state.units[i].get("custom_label", f"{pretty_short(product)} {i+1}")
     return {
         "label": label,
         "code":  st.session_state[f"code_{i}"],
