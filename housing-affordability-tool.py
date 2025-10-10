@@ -80,9 +80,9 @@ R = load_regions(REGIONS)
 
 # ===== Helpers =====
 PRETTY_OVERRIDES = {
-    "townhome":"Townhome (ownership; individual entrance; generally larger than a condo)",
-    "condo":"Condo (ownership; entrance from a common corridor; generally smaller than a townhome)",
-    "apartment":"Apartment (rental; entrance from a common corridor; generally smaller than condo/townhome)",
+    "townhome":"Townhome  →  (ownership; individual entrance; generally larger than a condo)",
+    "condo":"Condo  →  (ownership; entrance from a common corridor; generally smaller than a townhome)",
+    "apartment":"Apartment  →  (rental; entrance from a common corridor; generally smaller than condo/townhome)",
     "studio":"Studio",
     "vt_energy_code":"Regionally standard energy code",
     "rbes":"Vermont’s 2024 RBES code (Residential Building Energy Standard)",
