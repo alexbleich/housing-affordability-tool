@@ -466,6 +466,7 @@ prev_prod = st.session_state.get("global_product_prev", "townhome")
 
 # Big, readable prompt above the radio (hide the radio's own label)
 st.markdown('<div class="big-prompt">What kind of housing are we talking about?</div>', unsafe_allow_html=True)
+st.markdown('<div style="height:10px;"></div>', unsafe_allow_html=True)
 product = st.radio(
     label=" ",
     options=["townhome","condo","apartment"],
