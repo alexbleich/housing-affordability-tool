@@ -95,10 +95,18 @@ PRETTY_OVERRIDES = {
 }
 TOKEN_UPPER = {" Ami":" AMI"," Vt ":" VT "," Nh ":" NH "," Me ":" ME "," Evt ":" EVT "," Mf ":" MF "}
 
+# ---- Step-1 vertical radio button spacing ----
 st.markdown("""
 <style>
 /* Extra gap between vertical radio options (e.g., Townhome/Condo/Apartment) */
 div[data-testid="stRadio"] > div[role="radiogroup"]:not([aria-orientation="horizontal"]) { row-gap: 0.6rem; }
+</style>
+""", unsafe_allow_html=True)
+
+# ---- Step-2 label spacing: bold lead-in + tight gap to widget ----
+st.markdown("""
+<style>
+.field-label { font-size: 0.98rem; font-weight: 600; margin: 0 0 0.15rem 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -108,6 +116,13 @@ def pretty(x: str) -> str:
     t = s.replace("_"," ").title()
     for k, v in TOKEN_UPPER.items(): t = t.replace(k, v)
     return t
+
+def field_label(bold_text: str, rest: str = ""):
+    """Renders '**Bold:** rest' with tight spacing right above a widget."""
+    if rest:
+        st.markdown(f'<div class="field-label"><b>{bold_text}:</b> {rest}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="field-label"><b>{bold_text}</b></div>', unsafe_allow_html=True)
 
 def fmt_money(x):
     val = pd.to_numeric(x, errors="coerce")
@@ -295,7 +310,7 @@ def _bar_with_values(ax, labels, values, pad_ratio):
         ax.text(b.get_x()+b.get_width()/2, y * (1 + pad_ratio), fmt_money(y), ha="center", va="bottom", fontsize=10)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
 
-def draw_chart2(labels, tdc_vals, afford_price, price_to_income, income_to_price):
+def draw_chart(labels, tdc_vals, afford_price, price_to_income, income_to_price):
     fig, ax = plt.subplots(figsize=(12, 6))
     top_bar  = max(tdc_vals) if tdc_vals else 1.0
     top_line = float(afford_price) if (afford_price is not None and np.isfinite(afford_price)) else 0.0
@@ -371,45 +386,69 @@ def _maybe_update_labels_on_product_change(old_prod: str, new_prod: str):
 def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
     _prime_unit_widget_keys(i)
     u = st.session_state.units[i]
+
     with st.container(border=True):
         st.subheader(f"Option {i+1}")
+
         # Duplicate from previous
         if i > 0 and st.button("Duplicate from previous", key=f"dup_{i}", disabled=disabled):
-            _duplicate_from_previous(i); st.rerun()
+            _duplicate_from_previous(i)
+            st.rerun()
 
-        # Energy Code
+        # ---- Energy Code (filtered & ordered) ----
         raw_codes = [o for o in options("energy_code", DEFAULT_PARENT) if o in set(ENERGY_CODE_ORDER)]
-        opt_code = [c for c in ENERGY_CODE_ORDER if c in raw_codes] or ["vt_energy_code","rbes","passive_house"]
+        opt_code = [c for c in ENERGY_CODE_ORDER if c in raw_codes] or ["vt_energy_code", "rbes", "passive_house"]
+
+        field_label("Energy Efficiency", "What energy code standard would you like to build to?")
         st.selectbox(
-            "Energy Efficiency: What energy code standard would you like to build to?",
-            opt_code, format_func=pretty, key=f"code_{i}",
-            disabled=disabled, on_change=lambda: _update_component(i, "code", st.session_state[f"code_{i}"])
+            " ",
+            opt_code,
+            format_func=pretty,
+            key=f"code_{i}",
+            label_visibility="collapsed",
+            disabled=disabled,
+            on_change=lambda: _update_component(i, "code", st.session_state[f"code_{i}"])
         )
 
-        # Energy Source
+        # ---- Energy Source ----
         opt_src = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
+
+        field_label("Heating", "How would you like to heat the home?")
         st.selectbox(
-            "Heating: How would you like to heat the home?",
-            opt_src, format_func=pretty, key=f"src_{i}",
-            disabled=disabled, on_change=lambda: _update_component(i, "src", st.session_state[f"src_{i}"])
+            " ",
+            opt_src,
+            format_func=pretty,
+            key=f"src_{i}",
+            label_visibility="collapsed",
+            disabled=disabled,
+            on_change=lambda: _update_component(i, "src", st.session_state[f"src_{i}"])
         )
 
-        # Finish quality
-        opt_fin_all = options("finish_quality", DEFAULT_PARENT) or ["below_average","average","above_average"]
-        order_map = {"below_average":0, "average":1, "above_average":2}
+        # ---- Finish Quality (low → high; default = average) ----
+        opt_fin_all = options("finish_quality", DEFAULT_PARENT) or ["below_average", "average", "above_average"]
+        order_map = {"below_average": 0, "average": 1, "above_average": 2}
         opt_fin = sorted(set(opt_fin_all), key=lambda k: order_map.get(k, 99))
+
+        field_label("Quality", "How “nice” would you like the finish quality (kitchen, bathroom, flooring, etc.) to be?")
         st.selectbox(
-            "Quality: How “nice” would you like the finish quality (kitchen, bathroom, flooring, etc.) to be?",
-            opt_fin, index=opt_fin.index("average") if "average" in opt_fin else 0, format_func=pretty, key=f"fin_{i}",
-            disabled=disabled, on_change=lambda: _update_component(i, "fin", st.session_state[f"fin_{i}"])
+            " ",
+            opt_fin,
+            index=opt_fin.index("average") if "average" in opt_fin else 0,
+            format_func=pretty,
+            key=f"fin_{i}",
+            label_visibility="collapsed",
+            disabled=disabled,
+            on_change=lambda: _update_component(i, "fin", st.session_state[f"fin_{i}"])
         )
 
-        # Toggle
+        # ---- Location toggle (renamed) ----
         current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
+        field_label("Location", "In a new neighborhood")
         toggle_val = st.toggle(
-            "In a new neighborhood",
+            " ",
             value=(current_infra_opt == "yes"),
             key=f"infra_toggle_{i}",
+            label_visibility="collapsed",
             disabled=disabled
         )
         new_infra_opt = bool_to_infra_opt(toggle_val)
@@ -417,14 +456,22 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
             st.session_state[f"infra_{i}"] = new_infra_opt
             _update_component(i, "infra", new_infra_opt)
 
-        # Advanced components: include Bar label here
+        # ---- Advanced components ----
         with st.expander("Advanced components", expanded=False):
-            st.caption("Extras configured in data when available (e.g., Solar, Covered Parking).")
+            # Extras live in data (e.g., Solar, Covered Parking)
             default_label = f"{pretty(product)} {i+1}"
             if not st.session_state.get(f"label_{i}"):
                 st.session_state[f"label_{i}"] = st.session_state.units[i].get("custom_label", default_label)
-            new_label = st.text_input("Bar label", value=st.session_state[f"label_{i}"], key=f"label_{i}")
-            st.session_state.units[i]["custom_label"] = new_label
+
+            field_label("Bar label")
+            st.session_state.units[i]["custom_label"] = st.text_input(
+                " ",
+                value=st.session_state[f"label_{i}"],
+                key=f"label_{i}",
+                label_visibility="collapsed",
+                disabled=disabled
+            )
+            st.caption("Extras configured in data when available (e.g., Solar, Covered Parking).")
 
     # Final label to use
     label = st.session_state.units[i].get("custom_label", f"{pretty(product)} {i+1}")
@@ -573,7 +620,7 @@ if show_results:
             st.warning("Not enough data to build the price↔income mapping for this selection.")
         else:
             afford_price = float(i2p(np.array([user_income]))[0])
-            draw_chart2(labels, tdc_vals, afford_price, p2i, i2p)
+            draw_chart(labels, tdc_vals, afford_price, p2i, i2p)
 
             # Success / Failure messages with labels
             prices = np.asarray(tdc_vals, dtype=float)
