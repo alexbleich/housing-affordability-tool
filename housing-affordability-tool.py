@@ -104,6 +104,10 @@ TOKEN_UPPER = {" Ami":" AMI"," Vt ":" VT "," Nh ":" NH "," Me ":" ME "," Evt ":"
 # ---- UI CSS tweaks ----
 st.markdown("""
 <style>
+.top-links a { text-decoration: none; }
+.top-links { margin-bottom: 0.5rem; }
+.top-links .sep { padding: 0 0.4rem; }  /* equal space on both sides */
+
 /* Step prompts (bigger) */
 .step-prompt{
   margin: 0 0 0.20rem 0;
@@ -471,10 +475,11 @@ st.write("“Build” one type of housing or compare multiple. Can you afford ne
 st.markdown(
     '<div class="top-links">'
     '<a href="https://github.com/alexbleich/housing-affordability-tool" target="_blank">View all assumptions and code here</a>'
-    ' | '
+    '<span class="sep">|</span>'
     '<a href="https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf" target="_blank">VHFA Affordability Data</a>'
     '</div>',
-    unsafe_allow_html=True)
+    unsafe_allow_html=True
+)
 st.write("")
 
 # ===== Step 1 – Choose the Housing Type =====
