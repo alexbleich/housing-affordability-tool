@@ -542,13 +542,12 @@ st.number_input(
 user_income = float(st.session_state["user_income"])
 
 # Note 1 (grey) + spacer
-st.caption(f"Minimum/maximum income allowed for this household size: {fmt_money(min_income)} to {fmt_money(max_income)}")
+st.write(f"Minimum/maximum income allowed for this household size: {fmt_money(min_income)} to {fmt_money(max_income)}")
 st.write("")
 
 st.write("Note - *Statewide Median Household Income: $85,000*")
-st.write("")
 
-st.subheader("Let’s see how you did")
+st.subheader("Let’s see how you did!")
 show_results = st.toggle("View the home you built", value=False, key="view_home_toggle")
 
 # ===== Results (Graph + Messaging) =====
