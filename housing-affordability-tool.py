@@ -104,11 +104,31 @@ TOKEN_UPPER = {" Ami":" AMI"," Vt ":" VT "," Nh ":" NH "," Me ":" ME "," Evt ":"
 # ---- UI CSS tweaks ----
 st.markdown("""
 <style>
-/* Extra gap between vertical radio options (e.g., Townhome/Condo/Apartment) */
-div[data-testid="stRadio"] > div[role="radiogroup"]:not([aria-orientation="horizontal"]) { row-gap: 0.6rem; }
-/* Bold-lead labels above widgets with a little space */
-.field-label{ font-size:0.98rem; margin:0 0 0.28rem 0; }
-.field-label .lead{ font-weight:700; }
+/* Step prompts (bigger) */
+.step-prompt{
+  margin: 0 0 0.20rem 0;
+  line-height: 1.15;
+}
+
+/* Sub-prompts (slightly smaller for things like Bedrooms) */
+.sub-prompt{
+  margin: 0 0 0.20rem 0;
+  line-height: 1.15;
+  font-size: 1.0rem;   /* smaller than default write() heading-like size */
+  font-weight: 600;    /* looks like bold but not huge */
+}
+
+/* Radio groups */
+div[data-testid="stRadio"] > div[role="radiogroup"]:not([aria-orientation="horizontal"]) { 
+  row-gap: 0.55rem;
+}
+div[data-testid="stRadio"] > div[role="radiogroup"]{
+  margin-top: 0.10rem !important;
+}
+
+/* Step-2 field labels */
+.field-label{ font-size: 0.98rem; margin: 0 0 0.28rem 0; }
+.field-label .lead{ font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -454,32 +474,59 @@ st.write("")
 # ===== Step 1 – Choose the Housing Type =====
 st.header("Step 1 – Choose the Housing Type")
 
-# Track previous selection to update default labels when product changes
+# Track previous selection so we can relabel defaults when product changes
 prev_prod = st.session_state.get("global_product_prev", "townhome")
 
-st.write("**What kind of housing are we talking about?**")
-product = st.radio(" ", ["townhome","condo","apartment"], format_func=pretty,
-                   horizontal=False, key="global_product", label_visibility="collapsed")
+# Prompt (tight spacing)
+st.markdown(
+    '<p class="step-prompt"><strong>What kind of housing are we talking about?</strong></p>',
+    unsafe_allow_html=True
+)
 
-# Update default-like labels if product changed
+# Housing type (vertical; pretty() shows arrow + descriptions)
+product = st.radio(
+    " ",
+    ["townhome", "condo", "apartment"],
+    format_func=pretty,
+    horizontal=False,
+    key="global_product",
+    label_visibility="collapsed",
+)
+
+# If product changed, rewrite any default-like bar labels to new short names
 if product != prev_prod:
     _maybe_update_labels_on_product_change(prev_prod, product)
     st.session_state["global_product_prev"] = product
 
-st.write("")  # small gap
+st.write("")
 
 apartment_mode = (product == "apartment")
 
 if not apartment_mode:
-    st.write("**Number of bedrooms**")
-    br_opts = ["1","2","3","4"] if product == "townhome" else ["1","2","3"]
-    bedrooms = st.radio(" ", br_opts, index=br_opts.index("2") if "2" in br_opts else 0,
-                        format_func=pretty, horizontal=True, key="global_bedrooms",
-                        label_visibility="collapsed")
+    # Bedrooms prompt (smaller)
+    st.markdown(
+        '<p class="sub-prompt"><strong>Number of bedrooms</strong></p>',
+        unsafe_allow_html=True
+    )
+    # 1–4 for townhomes; 1–3 for condos
+    br_opts = ["1", "2", "3", "4"] if product == "townhome" else ["1", "2", "3"]
+    bedrooms = st.radio(
+        " ",
+        br_opts,
+        index=br_opts.index("2") if "2" in br_opts else 0,
+        format_func=pretty,
+        horizontal=True,
+        key="global_bedrooms",
+        label_visibility="collapsed",
+    )
+    # Pull sqft from assumptions (falls back to 1000 if missing)
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
-    st.info("Apartment modeling (rent-based) coming soon. For now, choose Townhome or Condo to compare for-sale products.")
+    st.info(
+        "Apartment modeling (rent-based) coming soon. "
+        "For now, choose Townhome or Condo to compare for-sale products."
+    )
 
 st.divider()
 
