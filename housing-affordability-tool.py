@@ -78,43 +78,37 @@ def load_regions(files: dict) -> dict:
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
 
-# ===== Helpers =====
+# ===== Helpers (display + options) =====
 PRETTY_OVERRIDES = {
-    "townhome":"Townhome → (ownership; individual entrance; generally larger than a condo)",
-    "condo":"Condo → (ownership; entrance from a common corridor; generally smaller than a townhome)",
-    "apartment":"Apartment → (rental; entrance from a common corridor; generally smaller than condo/townhome)",
+    # Housing types (for radio display only; bar labels use short names below)
+    "townhome":"Townhome  →  (ownership; individual entrance; generally larger than a condo)",
+    "condo":"Condo  →  (ownership; entrance from a common corridor; generally smaller than a townhome)",
+    "apartment":"Apartment  →  (rental; entrance from a common corridor; generally smaller than condo/townhome)",
     "studio":"Studio",
+    # Energy code
     "vt_energy_code":"Regionally standard energy code",
     "rbes":"Vermont’s 2024 RBES code (Residential Building Energy Standard)",
     "passive_house":"Passive House Standard",
+    # Energy sources
     "natural_gas":"Natural Gas",
     "all_electric":"All Electric",
     "geothermal":"Geothermal",
+    # Finish quality
     "below_average":"Below Average","average":"Average","above_average":"Above Average",
+    # Yes/No
     "yes":"Yes","no":"No",
 }
-
 PRODUCT_SHORT = {"townhome": "Townhome", "condo": "Condo", "apartment": "Apartment"}
 TOKEN_UPPER = {" Ami":" AMI"," Vt ":" VT "," Nh ":" NH "," Me ":" ME "," Evt ":" EVT "," Mf ":" MF "}
 
-# ---- Step-1 vertical radio button spacing ----
+# ---- UI CSS tweaks ----
 st.markdown("""
 <style>
 /* Extra gap between vertical radio options (e.g., Townhome/Condo/Apartment) */
 div[data-testid="stRadio"] > div[role="radiogroup"]:not([aria-orientation="horizontal"]) { row-gap: 0.6rem; }
-</style>
-""", unsafe_allow_html=True)
-
-# ---- Step-2 label spacing: bold lead-in + tight gap to widget ----
-st.markdown("""
-<style>
-.field-label{
-  font-size: 0.98rem;
-  margin: 0 0 0.28rem 0;  /* small, consistent gap to the widget */
-}
-.field-label .lead{
-  font-weight: 700;       /* just the lead is bold */
-}
+/* Bold-lead labels above widgets with a little space */
+.field-label{ font-size:0.98rem; margin:0 0 0.28rem 0; }
+.field-label .lead{ font-weight:700; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -130,13 +124,16 @@ def pretty_short(x: str) -> str:
 
 def field_label(lead_text: str, rest: str = ""):
     lead = lead_text.rstrip(":")
-    st.markdown(
-        f'<div class="field-label"><span class="lead">{lead}</span>: {rest}</div>',
-        unsafe_allow_html=True)
+    st.markdown(f'<div class="field-label"><span class="lead">{lead}</span>: {rest}</div>', unsafe_allow_html=True)
 
 def fmt_money(x):
     val = pd.to_numeric(x, errors="coerce")
     return "—" if pd.isna(val) else f"${val:,.0f}"
+
+def options(cat, parent=None):
+    q = A["category"].eq(cat)
+    if parent is not None: q &= A["parent_option"].eq(str(parent).lower())
+    return A.loc[q, "option"].tolist()
 
 def _rows(cat, opt=None, parent=None):
     q = A["category"].eq(cat)
@@ -151,21 +148,17 @@ def one_val(cat, opt, parent=None, expect_type=None, default=0.0):
     if expect_type and r.iloc[0]["value_type"] != expect_type: return default
     return float(r.iloc[0]["value"])
 
-def options(cat, parent=None):
-    return _rows(cat, parent=parent)["option"].tolist()
-
 def bedroom_sf(h_type, br_label):
     r = _rows("bedrooms", br_label, h_type)
     return float(r.iloc[0]["value"]) if not r.empty else np.nan
 
+# ===== Cost model pieces =====
 def mf_factor(h_type): return one_val("mf_efficiency_factor","default",h_type, default=1.0)
-
 def baseline_hard_per_sf(): return one_val("baseline_hard_cost","baseline")
-
 def soft_cost_pct(): return one_val("soft_cost","baseline")
 
 def infra_per_unit(htype: str, opt: str) -> float:
-    return one_val("new_neighborhood", opt, parent=htype, expect_type=None, default=0.0)
+    return one_val("new_neighborhood", opt, parent=htype, default=0.0)
 
 def bool_to_infra_opt(b: bool) -> str:
     return "yes" if bool(b) else "no"
@@ -185,32 +178,30 @@ def _sum_overlay(cat, selected_opt, parents):
     fixed   = _sum_values(cat, selected_opt, parents, "fixed")   + _sum_values(cat, "default", parents, "fixed")
     return per_sf, per_unit, fixed
 
-# ===== Core Cost Model =====
 def compute_tdc(sf, htype, code, src, infra, fin):
-    """Compute Total Development Cost with:
+    """Total Development Cost with:
        - baseline HARD cost per sf (mf & energy/finish %),
        - SOFT cost multiplies the HARD portion only,
        - overlays from energy_source & other categories,
-       - acq_cost ignored,
+       - acquisition ignored,
        - new_neighborhood per-unit toggle.
     """
     parents = [htype, "default"]
 
-    # --- HARD cost per sf ---
+    # HARD per sf (with soft cost multiplier)
     base_hard_psf = baseline_hard_per_sf()
     mf_mult  = mf_factor(htype)
     pct_mult = (one_val("energy_code", code) + one_val("finish_quality", fin)) / 100.0
     hard_psf_before_soft = base_hard_psf * (mf_mult + pct_mult)
-    soft_mult = 1.0 + (soft_cost_pct() / 100.0)
-    hard_psf = hard_psf_before_soft * soft_mult
+    hard_psf = hard_psf_before_soft * (1.0 + soft_cost_pct()/100.0)
 
-    # --- Overlays ---
+    # Overlays
     es_psf, es_pu, es_fx = _sum_overlay("energy_source", src, parents)
 
-    # "Other" categories auto-include (option=default) EXCEPT known categories & acq_cost
+    # Other categories (default rows) excluding known ones + acquisition
     EXCLUDE = {"baseline_hard_cost","soft_cost","mf_efficiency_factor",
                "energy_code","finish_quality","energy_source","new_neighborhood","bedrooms",
-               "acq_cost"}  # ignore acquisition for now
+               "acq_cost"}
     other = A[~A["category"].isin(EXCLUDE)]
     other = other[(other["option"].eq("default")) & (other["parent_option"].isin([htype, "default"]))]
 
@@ -220,18 +211,13 @@ def compute_tdc(sf, htype, code, src, infra, fin):
 
     infra_pu = infra_per_unit(htype, infra) if infra in ("yes", "no") else 0.0
 
-    # --- Total ---
-    total = 0.0
-    total += sf * (hard_psf + es_psf + other_psf)  # HARD (with soft) + per_sf overlays
-    total += es_pu + other_pu + infra_pu
-    total += es_fx + other_fx
+    total = sf * (hard_psf + es_psf + other_psf) + es_pu + other_pu + infra_pu + es_fx + other_fx
     return total
 
 # ===== Price ↔ Income mapping (Chittenden engine) =====
-def _best_buy_col_for_bed(df_cols, bed_n: int) -> str|None:
+def _best_buy_col_for_bed(df_cols, bed_n: int):
     avail = sorted([int(m.group(1)) for c in df_cols if (m:=re.match(r"buy(\d+)$", c))], key=int)
     if not avail: return None
-    # choose the largest available <= bed_n, else the smallest available
     le = [n for n in avail if n <= bed_n]
     pick = (le[-1] if le else avail[0])
     return f"buy{pick}"
@@ -284,8 +270,8 @@ def affordable_mask(user_income, required_incomes, eps=AFFORD_EPS):
     ui = float(user_income)
     return np.isfinite(r) & ((ui + eps) >= r)
 
-# % AMI for "More about this home"
 def ami_percent_for_income(region_key: str, hh_size: int, required_income: float):
+    """Return (percent_ami, capped_bool). Floors to lower bracket; caps to 30/150 with '(at least)' handling upstream."""
     df = R[region_key].copy()
     col = f"income{hh_size}"
     if col not in df.columns: return None, False
@@ -294,21 +280,14 @@ def ami_percent_for_income(region_key: str, hh_size: int, required_income: float
     mask = ser_inc.notna() & ser_ami.notna()
     sub = pd.DataFrame({"ami": ser_ami[mask], "inc": ser_inc[mask]}).sort_values("ami")
     if sub.empty: return None, False
-
     ami_min, ami_max = 0.30, 1.50
     inc_min = float(sub.loc[np.isclose(sub["ami"], ami_min), "inc"].min()) if (sub["ami"]<=ami_min).any() else float(sub["inc"].min())
     inc_max = float(sub.loc[np.isclose(sub["ami"], ami_max), "inc"].max()) if (sub["ami"]>=ami_max).any() else float(sub["inc"].max())
-
     inc = float(required_income)
-    if inc <= inc_min:
-        return 30, True
-    if inc >= inc_max:
-        return 150, True
-
-    # Floor to lower bracket: largest AMI whose income <= required income
+    if inc <= inc_min: return 30, True
+    if inc >= inc_max: return 150, True
     sub_le = sub[sub["inc"] <= inc]
-    if sub_le.empty:
-        return 30, True
+    if sub_le.empty: return 30, True
     ami_frac = float(sub_le.iloc[-1]["ami"])
     return int(round(ami_frac*100)), False
 
@@ -352,7 +331,7 @@ def _ensure_units(n, product_key="townhome"):
         st.session_state.units = []
     while len(st.session_state.units) < n:
         idx = len(st.session_state.units)
-        prod_for_label = pretty_short(st.session_state.get("global_product", "townhome"))
+        prod_for_label = pretty_short(st.session_state.get("global_product", product_key))
         st.session_state.units.append({
             "components": DEFAULT_COMPONENTS.copy(),
             "custom_label": f"{prod_for_label} {idx+1}",
@@ -384,117 +363,86 @@ def _update_component(i, field, value):
     st.session_state.units[i]["components"][field] = value
 
 def _maybe_update_labels_on_product_change(old_prod: str, new_prod: str):
-    """If a label equals the old default (long or short form), update to the new short default."""
-    if "units" not in st.session_state: 
+    """
+    If a unit's label still matches the *default* shape for the old product,
+    rewrite it to the new product's short default (e.g., 'Townhome 1' -> 'Condo 1').
+    Custom labels are left untouched.
+    """
+    if "units" not in st.session_state:
         return
+    old_short = pretty_short(old_prod)
+    new_short = pretty_short(new_prod)
     for idx, u in enumerate(st.session_state.units):
-        old_default_short = f"{pretty_short(old_prod)} {idx+1}"
-        old_default_long  = f"{pretty(old_prod)} {idx+1}"
-        current = u.get("custom_label", "")
-        if current in (old_default_short, old_default_long):
-            new_default = f"{pretty_short(new_prod)} {idx+1}"
+        current = (u.get("custom_label") or "").strip()
+        exact_short = f"{old_short} {idx+1}"
+        # Fuzzy match: starts with old product name, ends with the index (covers arrow/explanations)
+        if current == exact_short or re.match(rf"^{re.escape(old_short)}.*\s{idx+1}\s*$", current):
+            new_default = f"{new_short} {idx+1}"
             st.session_state.units[idx]["custom_label"] = new_default
             st.session_state[f"label_{idx}"] = new_default
 
+# ===== Unit card (Step 2) =====
 def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
     _prime_unit_widget_keys(i)
     u = st.session_state.units[i]
-
     with st.container(border=True):
         st.subheader(f"Option {i+1}")
 
-        # Duplicate from previous
         if i > 0 and st.button("Duplicate from previous", key=f"dup_{i}", disabled=disabled):
-            _duplicate_from_previous(i)
-            st.rerun()
+            _duplicate_from_previous(i); st.rerun()
 
-        # ---- Energy Code (filtered & ordered) ----
+        # Energy Code
         raw_codes = [o for o in options("energy_code", DEFAULT_PARENT) if o in set(ENERGY_CODE_ORDER)]
         opt_code = [c for c in ENERGY_CODE_ORDER if c in raw_codes] or ["vt_energy_code", "rbes", "passive_house"]
-
         field_label("Energy Efficiency", "What energy code standard would you like to build to?")
-        st.selectbox(
-            " ",
-            opt_code,
-            format_func=pretty,
-            key=f"code_{i}",
-            label_visibility="collapsed",
-            disabled=disabled,
-            on_change=lambda: _update_component(i, "code", st.session_state[f"code_{i}"])
-        )
+        st.selectbox(" ", opt_code, format_func=pretty, key=f"code_{i}",
+                     label_visibility="collapsed", disabled=disabled,
+                     on_change=lambda: _update_component(i, "code", st.session_state[f"code_{i}"]))
 
-        # ---- Energy Source ----
+        # Energy Source
         opt_src = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
-
         field_label("Heating", "How would you like to heat the home?")
-        st.selectbox(
-            " ",
-            opt_src,
-            format_func=pretty,
-            key=f"src_{i}",
-            label_visibility="collapsed",
-            disabled=disabled,
-            on_change=lambda: _update_component(i, "src", st.session_state[f"src_{i}"])
-        )
+        st.selectbox(" ", opt_src, format_func=pretty, key=f"src_{i}",
+                     label_visibility="collapsed", disabled=disabled,
+                     on_change=lambda: _update_component(i, "src", st.session_state[f"src_{i}"]))
 
-        # ---- Finish Quality (low → high; default = average) ----
-        opt_fin_all = options("finish_quality", DEFAULT_PARENT) or ["below_average", "average", "above_average"]
-        order_map = {"below_average": 0, "average": 1, "above_average": 2}
+        # Finish quality (low → high; default = average)
+        opt_fin_all = options("finish_quality", DEFAULT_PARENT) or ["below_average","average","above_average"]
+        order_map = {"below_average":0, "average":1, "above_average":2}
         opt_fin = sorted(set(opt_fin_all), key=lambda k: order_map.get(k, 99))
-
         field_label("Quality", "How “nice” would you like the finish quality (kitchen, bathroom, flooring, etc.) to be?")
-        st.selectbox(
-            " ",
-            opt_fin,
-            index=opt_fin.index("average") if "average" in opt_fin else 0,
-            format_func=pretty,
-            key=f"fin_{i}",
-            label_visibility="collapsed",
-            disabled=disabled,
-            on_change=lambda: _update_component(i, "fin", st.session_state[f"fin_{i}"])
-        )
+        st.selectbox(" ", opt_fin,
+                     index=opt_fin.index("average") if "average" in opt_fin else 0,
+                     format_func=pretty, key=f"fin_{i}",
+                     label_visibility="collapsed", disabled=disabled,
+                     on_change=lambda: _update_component(i, "fin", st.session_state[f"fin_{i}"]))
 
-        # ---- Location toggle (renamed) ----
+        # Location toggle (renamed)
         current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
         field_label("Location", "In a new neighborhood")
-        toggle_val = st.toggle(
-            " ",
-            value=(current_infra_opt == "yes"),
-            key=f"infra_toggle_{i}",
-            label_visibility="collapsed",
-            disabled=disabled
-        )
+        toggle_val = st.toggle(" ", value=(current_infra_opt == "yes"),
+                               key=f"infra_toggle_{i}", label_visibility="collapsed", disabled=disabled)
         new_infra_opt = bool_to_infra_opt(toggle_val)
         if new_infra_opt != current_infra_opt:
             st.session_state[f"infra_{i}"] = new_infra_opt
             _update_component(i, "infra", new_infra_opt)
 
-        # ---- Advanced components ----
+        # Advanced components (Bar label lives here)
         with st.expander("Advanced components", expanded=False):
-            # Extras live in data (e.g., Solar, Covered Parking)
             default_label = f"{pretty_short(product)} {i+1}"
             if not st.session_state.get(f"label_{i}"):
                 st.session_state[f"label_{i}"] = st.session_state.units[i].get("custom_label", default_label)
-
             field_label("Bar label")
             st.session_state.units[i]["custom_label"] = st.text_input(
-                " ",
-                value=st.session_state[f"label_{i}"],
-                key=f"label_{i}",
-                label_visibility="collapsed",
-                disabled=disabled
+                " ", value=st.session_state[f"label_{i}"], key=f"label_{i}",
+                label_visibility="collapsed", disabled=disabled
             )
             st.caption("Extras configured in data when available (e.g., Solar, Covered Parking).")
 
-    # Final label to use
+    # Final label
     label = st.session_state.units[i].get("custom_label", f"{pretty_short(product)} {i+1}")
-    return {
-        "label": label,
-        "code":  st.session_state[f"code_{i}"],
-        "src":   st.session_state[f"src_{i}"],
-        "infra": st.session_state[f"infra_{i}"],
-        "fin":   st.session_state[f"fin_{i}"],
-    }
+    return {"label": label, "code": st.session_state[f"code_{i}"], "src": st.session_state[f"src_{i}"],
+            "infra": st.session_state[f"infra_{i}"], "fin": st.session_state[f"fin_{i}"]}
 
 # ===== Header =====
 st.title("🏘️ Housing Affordability Visualizer")
@@ -506,35 +454,28 @@ st.write("")
 # ===== Step 1 – Choose the Housing Type =====
 st.header("Step 1 – Choose the Housing Type")
 
-# Housing type (vertical radios) with a bold prompt above
-st.write("**What kind of housing are we talking about?**")
-product = st.radio(
-    label=" ",  # hide the widget label so we don't duplicate text
-    options=["townhome","condo","apartment"],
-    format_func=pretty,
-    horizontal=False,
-    key="global_product",
-    label_visibility="collapsed",
-)
+# Track previous selection to update default labels when product changes
+prev_prod = st.session_state.get("global_product_prev", "townhome")
 
-# small gap for readability
-st.write("")
+st.write("**What kind of housing are we talking about?**")
+product = st.radio(" ", ["townhome","condo","apartment"], format_func=pretty,
+                   horizontal=False, key="global_product", label_visibility="collapsed")
+
+# Update default-like labels if product changed
+if product != prev_prod:
+    _maybe_update_labels_on_product_change(prev_prod, product)
+    st.session_state["global_product_prev"] = product
+
+st.write("")  # small gap
 
 apartment_mode = (product == "apartment")
 
 if not apartment_mode:
-    # Bedrooms prompt + radios (horizontal per your spec)
     st.write("**Number of bedrooms**")
     br_opts = ["1","2","3","4"] if product == "townhome" else ["1","2","3"]
-    bedrooms = st.radio(
-        label=" ",
-        options=br_opts,
-        index=br_opts.index("2") if "2" in br_opts else 0,
-        format_func=pretty,
-        horizontal=True,
-        key="global_bedrooms",
-        label_visibility="collapsed",
-    )
+    bedrooms = st.radio(" ", br_opts, index=br_opts.index("2") if "2" in br_opts else 0,
+                        format_func=pretty, horizontal=True, key="global_bedrooms",
+                        label_visibility="collapsed")
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
@@ -544,7 +485,6 @@ st.divider()
 
 # ===== Step 2 – How do you want the housing built? =====
 st.header("Step 2 – How do you want the housing built?")
-# Default compare count = 1; radios will appear under results
 if "num_units" not in st.session_state:
     st.session_state.num_units = 1
 
@@ -561,20 +501,12 @@ st.divider()
 
 # ===== Step 3 – Who can afford this home? =====
 st.header("Step 3 – Who can afford this home?")
-household_size = st.radio(
-    "Select household size",
-    list(range(1, 9)),
-    index=3,
-    horizontal=True,
-    key="household_size",
-)
+household_size = st.radio("Select household size", list(range(1, 9)),
+                          index=3, horizontal=True, key="household_size")
 
-# Bound income input using Chittenden transformers and selected bedroom
+# Bound income input from Chittenden and selected bedroom
 if not apartment_mode and bedrooms is not None:
-    reg_key_bounds = "Chittenden"
-    p2i_b, i2p_b, inc_min_b, inc_max_b, *_ = build_price_income_transformers(
-        reg_key_bounds, int(household_size), int(bedrooms)
-    )
+    p2i_b, i2p_b, inc_min_b, inc_max_b, *_ = build_price_income_transformers("Chittenden", int(household_size), int(bedrooms))
     if all(v is not None and np.isfinite(v) for v in (inc_min_b, inc_max_b)):
         min_income = int(np.floor(inc_min_b))
         max_income = int(np.ceil(inc_max_b))
@@ -590,45 +522,29 @@ if "user_income" not in st.session_state:
 else:
     st.session_state["user_income"] = int(np.clip(st.session_state["user_income"], min_income, max_income))
 
-st.number_input(
-    "",  # hide label
-    min_value=min_income,
-    max_value=max_income,
-    step=1000,
-    key="user_income",
-    format="%d",
-    label_visibility="collapsed",
-)
+st.number_input(" ", min_value=min_income, max_value=max_income, step=1000,
+                key="user_income", format="%d", label_visibility="collapsed")
 user_income = float(st.session_state["user_income"])
 
-# White "Note" lines (min/max + statewide median)
-st.markdown(
-    f"""<div style="color:#FFFFFF;">Note – Min/Max income allowed for household size {household_size}: 
-    {fmt_money(min_income)} to {fmt_money(max_income)}</div>""",
-    unsafe_allow_html=True
-)
-st.markdown(
-    """<div style="color:#FFFFFF;">Note – Statewide Household Median Income: $85,000</div>""",
-    unsafe_allow_html=True
-)
+# White “Note” lines
+st.markdown(f'<div style="color:#FFFFFF;">Note – Min/Max income allowed for household size {household_size}: {fmt_money(min_income)} to {fmt_money(max_income)}</div>', unsafe_allow_html=True)
+st.markdown('<div style="color:#FFFFFF;">Note – Statewide Household Median Income: $85,000</div>', unsafe_allow_html=True)
 
-# Hidden-by-default results switch
+# Toggle to reveal results
 show_results = st.toggle("Let’s see how you did: view home", value=False, key="view_home_toggle")
 
 # ===== Results (Graph + Messaging) =====
 if show_results:
     if not apartment_mode:
-        # Build labels and TDCs for current units
+        # Labels + TDCs
         labels, tdc_vals = [], []
         for idx, u in enumerate(units):
-            label = u["label"] or f"{pretty(product)} {idx+1}"
+            label = u["label"] or f"{pretty_short(product)} {idx+1}"
             labels.append(label)
             tdc_vals.append(compute_tdc(sf, product, u["code"], u["src"], u["infra"], u["fin"]))
 
-        # Chittenden mapping only
-        reg_key = "Chittenden"
-        p2i, i2p, *_ = build_price_income_transformers(reg_key, int(household_size), int(bedrooms))
-
+        # Chittenden mapping
+        p2i, i2p, *_ = build_price_income_transformers("Chittenden", int(household_size), int(bedrooms))
         if p2i is None or i2p is None:
             st.warning("Not enough data to build the price↔income mapping for this selection.")
         else:
@@ -644,43 +560,36 @@ if show_results:
             if len(labels) == 1:
                 if len(affordable_labels) == 1:
                     msg = "Congrats! The total development cost of this home is less than the income required to buy it."
-                    html = f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ <b>{msg}</b></div>"""
+                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ <b>{msg}</b></div>'
                 else:
                     msg = "Not quite! This home is unaffordable for the household income you entered."
-                    html = f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">❌ <b>{msg}</b></div>"""
+                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">❌ <b>{msg}</b></div>'
                 st.markdown(html, unsafe_allow_html=True)
             else:
                 k = len(affordable_labels)
                 if k == 0:
                     msg = "Not quite! These homes are unaffordable for the household income you entered."
-                    html = f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">❌ <b>{msg}</b></div>"""
+                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">❌ <b>{msg}</b></div>'
                 elif k == len(labels):
                     msg = "Congrats! The total development cost for all options are less than the income required to buy them."
-                    html = f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ <b>{msg}</b></div>"""
+                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ <b>{msg}</b></div>'
                 elif k == 1:
                     msg = f"Congrats! The total development cost for <b>{affordable_labels[0]}</b> is less than the income required to buy it."
-                    html = f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ {msg}</div>"""
+                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ {msg}</div>'
                 else:  # k == 2
                     msg = f"Congrats! The total development cost for <b>{affordable_labels[0]}</b> & <b>{affordable_labels[1]}</b> are less than the income required to buy them."
-                    html = f"""<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ {msg}</div>"""
+                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ {msg}</div>'
                 st.markdown(html, unsafe_allow_html=True)
 
-            # Space between callout and the info boxes
+            # Spacer
             st.write("")
 
             # "More About ..." boxes
             for idx, label in enumerate(labels):
                 req_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
-
-                # Title based on count
-                if len(labels) == 1:
-                    title = "More About This Home"
-                else:
-                    title = f"More About {label}"
-
+                title = "More About This Home" if len(labels) == 1 else f"More About {label}"
                 with st.container(border=True):
                     st.subheader(title)
-                    # Build AMI lines with caps and "(at least)" suffix when capped
                     lines = []
                     for rp in ["Chittenden", "Addison", "Rest of Vermont"]:
                         reg_key_line = PRETTY2REG[rp]
@@ -695,7 +604,6 @@ if show_results:
                                 text = f"**{pct}% of Area Median Income in {rp}{suffix}.**"
                         lines.append(text)
 
-                    # Bulleted list (matches screenshot style)
                     st.markdown(
                         "- " + f"You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.\n"
                         "- " + "This is only affordable for **0 of the 270,000 households in Vermont**.\n"
@@ -709,16 +617,12 @@ if show_results:
 
             # Compare controls (under 'Want to try again?')
             st.markdown("**Want to try again? Compare a new home with your first attempt**")
-            compare_n = st.radio(
-                "", options=[1,2,3],
-                index={1:0,2:1,3:2}[st.session_state.num_units],
-                horizontal=True, label_visibility="collapsed"
-            )
+            compare_n = st.radio("", options=[1,2,3],
+                                 index={1:0,2:1,3:2}[st.session_state.num_units],
+                                 horizontal=True, label_visibility="collapsed")
             if compare_n != st.session_state.num_units:
                 st.session_state.num_units = compare_n
-                _ensure_and_get_units()
-                st.rerun()
-
+                _ensure_and_get_units(); st.rerun()
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
 
