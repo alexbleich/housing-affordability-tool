@@ -106,12 +106,12 @@ div[data-testid="stRadio"] > div[role="radiogroup"]:not([aria-orientation="horiz
 # ---- Step-2 label spacing: bold lead-in + tight gap to widget ----
 st.markdown("""
 <style>
-.field-label {
+.field-label{
   font-size: 0.98rem;
-  margin: 0 0 0.15rem 0;   /* tight gap above the widget */
+  margin: 0 0 0.28rem 0;  /* small, consistent gap to the widget */
 }
-.field-label .lead {
-  font-weight: 700;        /* only the lead (incl. colon) is bold */
+.field-label .lead{
+  font-weight: 700;       /* just the lead is bold */
 }
 </style>
 """, unsafe_allow_html=True)
@@ -123,10 +123,10 @@ def pretty(x: str) -> str:
     for k, v in TOKEN_UPPER.items(): t = t.replace(k, v)
     return t
 
-def field_label(bold_text: str, rest: str = ""):
-    lead = bold_text if bold_text.endswith(":") else f"{bold_text}:"
+def field_label(lead_text: str, rest: str = ""):
+    lead = lead_text.rstrip(":")
     st.markdown(
-        f'<div class="field-label"><span class="lead">{lead}</span> {rest}</div>',
+        f'<div class="field-label"><span class="lead">{lead}</span>: {rest}</div>',
         unsafe_allow_html=True
     )
 
