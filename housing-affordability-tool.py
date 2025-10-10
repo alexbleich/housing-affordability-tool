@@ -33,10 +33,7 @@ AMI_COL = "ami"
 DEFAULT_PARENT = "default"
 AFFORD_EPS = 0.5
 
-# Allowed energy code options & order (per your request)
 ENERGY_CODE_ORDER = ["vt_energy_code", "rbes", "passive_house"]
-
-# No packages — explicit component defaults
 DEFAULT_COMPONENTS = dict(code="vt_energy_code", src="natural_gas", infra="no", fin="average")
 
 # ===== Data Loading =====
@@ -58,7 +55,6 @@ def load_assumptions(p: Path) -> pd.DataFrame:
         if t in {"persf","psf","sf"}: return "per_sf"
         if t in {"perunit"}:         return "per_unit"
         if t in {"fixed","flat","lump","fixedcost"}: return "fixed"
-        # pass through others: percent, factor, sqft
         return s
 
     df["value_type"] = df["value_type"].map(_norm_vtype)
@@ -84,25 +80,27 @@ R = load_regions(REGIONS)
 
 # ===== Helpers =====
 PRETTY_OVERRIDES = {
-    # Step 1: descriptions INSIDE the options
     "townhome":"Townhome (ownership; individual entrance; generally larger than a condo)",
     "condo":"Condo (ownership; entrance from a common corridor; generally smaller than a townhome)",
     "apartment":"Apartment (rental; entrance from a common corridor; generally smaller than condo/townhome)",
     "studio":"Studio",
-    # Energy code (EVT removed; explicit list only)
     "vt_energy_code":"Regionally standard energy code",
     "rbes":"Vermont’s 2024 RBES code (Residential Building Energy Standard)",
     "passive_house":"Passive House Standard",
-    # Energy sources
     "natural_gas":"Natural Gas",
     "all_electric":"All Electric",
     "geothermal":"Geothermal",
-    # Quality (ordered low → high in UI)
     "below_average":"Below Average","average":"Average","above_average":"Above Average",
-    # yes/no
     "yes":"Yes","no":"No",
 }
 TOKEN_UPPER = {" Ami":" AMI"," Vt ":" VT "," Nh ":" NH "," Me ":" ME "," Evt ":" EVT "," Mf ":" MF "}
+
+st.markdown("""
+<style>
+/* Extra gap between vertical radio options (e.g., Townhome/Condo/Apartment) */
+div[data-testid="stRadio"] > div[role="radiogroup"]:not([aria-orientation="horizontal"]) { row-gap: 0.6rem; }
+</style>
+""", unsafe_allow_html=True)
 
 def pretty(x: str) -> str:
     s = str(x).lower().strip()
@@ -139,10 +137,9 @@ def mf_factor(h_type): return one_val("mf_efficiency_factor","default",h_type, d
 
 def baseline_hard_per_sf(): return one_val("baseline_hard_cost","baseline")
 
-def soft_cost_pct(): return one_val("soft_cost","baseline")  # percent value e.g. 30
+def soft_cost_pct(): return one_val("soft_cost","baseline")
 
 def infra_per_unit(htype: str, opt: str) -> float:
-    # renamed category: new_neighborhood
     return one_val("new_neighborhood", opt, parent=htype, expect_type=None, default=0.0)
 
 def bool_to_infra_opt(b: bool) -> str:
@@ -380,7 +377,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
         if i > 0 and st.button("Duplicate from previous", key=f"dup_{i}", disabled=disabled):
             _duplicate_from_previous(i); st.rerun()
 
-        # Energy Code (filtered & ordered)
+        # Energy Code
         raw_codes = [o for o in options("energy_code", DEFAULT_PARENT) if o in set(ENERGY_CODE_ORDER)]
         opt_code = [c for c in ENERGY_CODE_ORDER if c in raw_codes] or ["vt_energy_code","rbes","passive_house"]
         st.selectbox(
@@ -397,7 +394,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
             disabled=disabled, on_change=lambda: _update_component(i, "src", st.session_state[f"src_{i}"])
         )
 
-        # Finish quality (ordered low → high)
+        # Finish quality
         opt_fin_all = options("finish_quality", DEFAULT_PARENT) or ["below_average","average","above_average"]
         order_map = {"below_average":0, "average":1, "above_average":2}
         opt_fin = sorted(set(opt_fin_all), key=lambda k: order_map.get(k, 99))
@@ -407,7 +404,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
             disabled=disabled, on_change=lambda: _update_component(i, "fin", st.session_state[f"fin_{i}"])
         )
 
-        # Toggle (renamed)
+        # Toggle
         current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
         toggle_val = st.toggle(
             "In a new neighborhood",
@@ -424,7 +421,6 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
         with st.expander("Advanced components", expanded=False):
             st.caption("Extras configured in data when available (e.g., Solar, Covered Parking).")
             default_label = f"{pretty(product)} {i+1}"
-            # Initialize label default if empty
             if not st.session_state.get(f"label_{i}"):
                 st.session_state[f"label_{i}"] = st.session_state.units[i].get("custom_label", default_label)
             new_label = st.text_input("Bar label", value=st.session_state[f"label_{i}"], key=f"label_{i}")
