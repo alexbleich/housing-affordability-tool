@@ -106,7 +106,13 @@ div[data-testid="stRadio"] > div[role="radiogroup"]:not([aria-orientation="horiz
 # ---- Step-2 label spacing: bold lead-in + tight gap to widget ----
 st.markdown("""
 <style>
-.field-label { font-size: 0.98rem; font-weight: 600; margin: 0 0 0.15rem 0; }
+.field-label {
+  font-size: 0.98rem;
+  margin: 0 0 0.15rem 0;   /* tight gap above the widget */
+}
+.field-label .lead {
+  font-weight: 700;        /* only the lead (incl. colon) is bold */
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -118,11 +124,11 @@ def pretty(x: str) -> str:
     return t
 
 def field_label(bold_text: str, rest: str = ""):
-    """Renders '**Bold:** rest' with tight spacing right above a widget."""
-    if rest:
-        st.markdown(f'<div class="field-label"><b>{bold_text}:</b> {rest}</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="field-label"><b>{bold_text}</b></div>', unsafe_allow_html=True)
+   lead = bold_text if bold_text.endswith(":") else f"{bold_text}:"
+    st.markdown(
+        f'<div class="field-label"><span class="lead">{lead}</span> {rest}</div>',
+        unsafe_allow_html=True
+    )
 
 def fmt_money(x):
     val = pd.to_numeric(x, errors="coerce")
