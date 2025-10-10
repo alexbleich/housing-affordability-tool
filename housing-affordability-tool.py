@@ -310,6 +310,20 @@ def draw_chart(labels, tdc_vals, afford_price, price_to_income, income_to_price)
     fig.tight_layout()
     st.pyplot(fig)
 
+def _ami_phrase(pct: int|None, region_label: str, capped_low: bool, capped_high: bool) -> str:
+    if pct is None:
+        return f"—% of AMI in {region_label}"
+    if capped_high:
+        if region_label == "Rest of Vermont":
+            return f"**More than 150% of AMI in the rest of Vermont.**"
+        else:
+            return f"**More than 150% of Area Median Income in {region_label}.**"
+    suffix = " (at least)" if capped_low else ""
+    if region_label == "Rest of Vermont":
+        return f"**{pct}% of AMI in the rest of Vermont{suffix}.**"
+    else:
+        return f"**{pct}% of Area Median Income in {region_label}{suffix}.**"
+
 # ===== Session State (units) =====
 def _ensure_units(n, product_key="townhome"):
     if "units" not in st.session_state:
@@ -395,10 +409,15 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
                      label_visibility="collapsed", disabled=disabled,
                      on_change=lambda: _update_component(i, "fin", st.session_state[f"fin_{i}"]))
 
+        # ---- Location toggle (no extra spacer) ----
         st.markdown("**Location:** In a new neighborhood")
         current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
-        toggle_val = st.toggle(" ", value=(current_infra_opt == "yes"),
-                               key=f"infra_toggle_{i}", label_visibility="collapsed", disabled=disabled)
+        toggle_val = st.toggle(
+            " ", value=(current_infra_opt == "yes"),
+            key=f"infra_toggle_{i}",
+            label_visibility="collapsed",
+            disabled=disabled
+        )
         new_infra_opt = bool_to_infra_opt(toggle_val)
         if new_infra_opt != current_infra_opt:
             st.session_state[f"infra_{i}"] = new_infra_opt
@@ -431,29 +450,39 @@ st.markdown(
     '[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)',
     unsafe_allow_html=True
 )
-st.write("")
 st.divider()
 
 # ===== Step 1 – Choose the Housing Type =====
 st.header("Step 1 – Choose the Housing Type")
+
 prev_prod = st.session_state.get("global_product_prev", "townhome")
-st.write("**What kind of housing are we talking about?**")
-product = st.radio(" ", ["townhome","condo","apartment"], format_func=pretty,
-                   horizontal=False, key="global_product", label_visibility="collapsed")
+
+st.markdown("**What kind of housing are we talking about?**")
+product = st.radio(
+    " ", ["townhome","condo","apartment"],
+    format_func=pretty,
+    horizontal=False,
+    key="global_product",
+    label_visibility="collapsed",
+)
 
 if product != prev_prod:
     _maybe_update_labels_on_product_change(prev_prod, product)
     st.session_state["global_product_prev"] = product
 
-st.write("")
 apartment_mode = (product == "apartment")
 
 if not apartment_mode:
-    st.write("**Number of bedrooms**")
+    st.markdown("**Number of bedrooms**")
     br_opts = ["1","2","3","4"] if product == "townhome" else ["1","2","3"]
-    bedrooms = st.radio(" ", br_opts, index=br_opts.index("2") if "2" in br_opts else 0,
-                        format_func=pretty, horizontal=True, key="global_bedrooms",
-                        label_visibility="collapsed")
+    bedrooms = st.radio(
+        " ", br_opts,
+        index=br_opts.index("2") if "2" in br_opts else 0,
+        format_func=pretty,
+        horizontal=True,
+        key="global_bedrooms",
+        label_visibility="collapsed",
+    )
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
@@ -479,10 +508,16 @@ st.divider()
 
 # ===== Step 3 – Who can afford this home? =====
 st.header("Step 3 – Who can afford this home?")
-household_size = st.radio("Select household size", list(range(1, 9)),
-                          index=3, horizontal=True, key="household_size")
 
-# Bound income input from Chittenden and selected bedroom
+# Make this prompt match Step-1 style (bold line immediately above radio)
+st.markdown("**Select household size**")
+household_size = st.radio(
+    " ", list(range(1, 9)),
+    index=3, horizontal=True, key="household_size",
+    label_visibility="collapsed"
+)
+
+# Bounds from Chittenden mapping for selected bedrooms
 if not apartment_mode and bedrooms is not None:
     p2i_b, i2p_b, inc_min_b, inc_max_b, *_ = build_price_income_transformers("Chittenden", int(household_size), int(bedrooms))
     if all(v is not None and np.isfinite(v) for v in (inc_min_b, inc_max_b)):
@@ -500,28 +535,51 @@ if "user_income" not in st.session_state:
 else:
     st.session_state["user_income"] = int(np.clip(st.session_state["user_income"], min_income, max_income))
 
-st.number_input(" ", min_value=min_income, max_value=max_income, step=1000,
-                key="user_income", format="%d", label_visibility="collapsed")
+st.number_input(
+    " ", min_value=min_income, max_value=max_income, step=1000,
+    key="user_income", format="%d", label_visibility="collapsed"
+)
 user_income = float(st.session_state["user_income"])
 
-# Notes (no HTML)
+# Note 1 (grey) + spacer
 st.caption(f"Minimum/maximum income allowed for this household size: {fmt_money(min_income)} to {fmt_money(max_income)}")
-st.write("")  # spacer
-st.caption("Note - *Statewide Median Household Income: $85,000*")
-st.write("")  # spacer before results
+st.write("")
+
+st.write("Note - *Statewide Median Household Income: $85,000*")
+st.write("")
 
 st.subheader("Let’s see how you did")
 show_results = st.toggle("View the home you built", value=False, key="view_home_toggle")
 
 # ===== Results (Graph + Messaging) =====
+def _ami_phrase(pct: int | None, region_label: str, capped_low: bool, capped_high: bool) -> str:
+    """Readable AMI line with special phrasing at caps."""
+    if pct is None:
+        return f"—% of AMI in {region_label}"
+    if capped_high:  # >150%
+        return (
+            f"More than 150% of AMI in the rest of Vermont."
+            if region_label == "Rest of Vermont"
+            else f"More than 150% of Area Median Income in {region_label}."
+        )
+    # <30% gets "(at least)"
+    suffix = " (at least)" if capped_low else ""
+    return (
+        f"{pct}% of AMI in the rest of Vermont{suffix}."
+        if region_label == "Rest of Vermont"
+        else f"{pct}% of Area Median Income in {region_label}{suffix}."
+    )
+
 if show_results:
     if not apartment_mode:
+        # Build labels and TDCs for current units
         labels, tdc_vals = [], []
         for idx, u in enumerate(units):
             label = u["label"] or f"{pretty_short(product)} {idx+1}"
             labels.append(label)
             tdc_vals.append(compute_tdc(sf, product, u["code"], u["src"], u["infra"], u["fin"]))
 
+        # Chittenden mapping (fixed engine)
         p2i, i2p, *_ = build_price_income_transformers("Chittenden", int(household_size), int(bedrooms))
         if p2i is None or i2p is None:
             st.warning("Not enough data to build the price↔income mapping for this selection.")
@@ -529,6 +587,7 @@ if show_results:
             afford_price = float(i2p(np.array([user_income]))[0])
             draw_chart(labels, tdc_vals, afford_price, p2i, i2p)
 
+            # Success / Failure messages (with labels for multi-home)
             prices = np.asarray(tdc_vals, dtype=float)
             req_incomes = p2i(prices)
             mask = affordable_mask(user_income, req_incomes)
@@ -556,49 +615,44 @@ if show_results:
             # Space between callout and info boxes
             st.write("")
 
-            # "More About ..." boxes
+            # "More About ..." boxes per option
             for idx, label in enumerate(labels):
                 req_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
+
                 with st.container(border=True):
                     st.subheader(title)
 
-                    # AMI lines for three regions with capping text
-                    bullets = []
-                    bullets.append(f"You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
-                    bullets.append("This is only affordable for **0 of the 270,000 households in Vermont**.")
-                    sublines = []
+                    # Top bullets
+                    st.markdown(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
+                    st.markdown("- This is only affordable for **0 of the 270,000 households in Vermont**.")
+                    st.markdown("- To afford this home, you would need to make:")
+
+                    # Sub-bullets for the 3 regions (handles caps and phrasing)
                     for rp in ["Chittenden", "Addison", "Rest of Vermont"]:
                         reg_key_line = PRETTY2REG[rp]
                         pct, capped = ami_percent_for_income(reg_key_line, int(household_size), req_inc)
-                        suffix = " (at least)" if (pct is not None and capped) else ""
-                        if pct is None:
-                            line = f"—% of AMI in {rp}"
-                        elif rp == "Rest of Vermont":
-                            line = f"**{pct}% of AMI in the rest of Vermont{suffix}.**"
-                        else:
-                            line = f"**{pct}% of Area Median Income in {rp}{suffix}.**"
-                        sublines.append(line)
+                        capped_low = (pct == 30 and capped)
+                        capped_high = (pct == 150 and capped)
+                        st.markdown(f"  - {_ami_phrase(pct, rp, capped_low, capped_high)}")
 
-                    st.markdown("- " + bullets[0])
-                    st.markdown("- " + bullets[1])
-                    st.markdown("- To afford this home, you would need to make:")
-                    st.markdown(f"  - {sublines[0]}")
-                    st.markdown(f"  - {sublines[1]}")
-                    st.markdown(f"  - {sublines[2]}")
                 st.write("")
 
-            # Compare controls (tight; no extra blank line above radios)
-            st.markdown("**Want to try again? Compare a new home with your first attempt**")
-            compare_n = st.radio(
-                "",
-                options=[1, 2, 3],
-                index={1:0, 2:1, 3:2}[st.session_state.num_units],
+            # ===== Compare controls =====
+            st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
+            st.markdown("**How many homes do you want to build?**")
+            compare_labels = {1: "1 home (current setting)", 2: "2 homes", 3: "3 homes"}
+            compare_choice = st.radio(
+                " ",
+                [1, 2, 3],
+                index={1: 0, 2: 1, 3: 2}[st.session_state.num_units],
                 horizontal=True,
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                format_func=lambda n: compare_labels[n],
             )
-            if compare_n != st.session_state.num_units:
-                st.session_state.num_units = compare_n
-                _ensure_and_get_units(); st.rerun()
+            if compare_choice != st.session_state.num_units:
+                st.session_state.num_units = compare_choice
+                _ensure_and_get_units()
+                st.rerun()
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
