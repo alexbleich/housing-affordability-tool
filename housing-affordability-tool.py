@@ -78,6 +78,38 @@ def load_regions(files: dict) -> dict:
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
 
+# ---- UI CSS tweaks ----
+st.markdown("""
+<style>
+/* existing rules ... */
+
+/* Notes under Step 3 */
+.note {
+  color: #6B7280;           /* grey-500 */
+  font-size: 0.95rem;
+  margin: 0.15rem 0 0.1rem 0;  /* tight to the input */
+}
+.subnote {
+  color: #6B7280; 
+  font-size: 0.95rem;
+  margin: 0.15rem 0 0.4rem 0;  /* a little more spacing below */
+}
+
+/* "Let's see how you did" heading */
+.results-subhead {
+  font-size: 1.10rem;
+  font-weight: 700;
+  margin: 0.25rem 0 0.25rem 0; /* space above & below */
+}
+
+/* Tighten gap between 'Want to try again?' and radios */
+.compare-prompt {
+  margin: 0 0 0.10rem 0;
+  font-weight: 700;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ===== Helpers (display + options) =====
 PRETTY_OVERRIDES = {
     # Housing types (for radio display only; bar labels use short names below)
@@ -100,41 +132,6 @@ PRETTY_OVERRIDES = {
 }
 PRODUCT_SHORT = {"townhome": "Townhome", "condo": "Condo", "apartment": "Apartment"}
 TOKEN_UPPER = {" Ami":" AMI"," Vt ":" VT "," Nh ":" NH "," Me ":" ME "," Evt ":" EVT "," Mf ":" MF "}
-
-# ---- UI CSS tweaks ----
-st.markdown("""
-<style>
-.top-links a { text-decoration: none; }
-.top-links { margin-bottom: 0.5rem; }
-.top-links .sep { padding: 0 0.4rem; }  /* equal space on both sides */
-
-/* Step prompts (bigger) */
-.step-prompt{
-  margin: 0 0 0.20rem 0;
-  line-height: 1.15;
-}
-
-/* Sub-prompts (slightly smaller for things like Bedrooms) */
-.sub-prompt{
-  margin: 0 0 0.20rem 0;
-  line-height: 1.15;
-  font-size: 1.0rem;   /* smaller than default write() heading-like size */
-  font-weight: 600;    /* looks like bold but not huge */
-}
-
-/* Radio groups */
-div[data-testid="stRadio"] > div[role="radiogroup"]:not([aria-orientation="horizontal"]) { 
-  row-gap: 0.55rem;
-}
-div[data-testid="stRadio"] > div[role="radiogroup"]{
-  margin-top: 0.10rem !important;
-}
-
-/* Step-2 field labels */
-.field-label{ font-size: 0.98rem; margin: 0 0 0.28rem 0; }
-.field-label .lead{ font-weight: 700; }
-</style>
-""", unsafe_allow_html=True)
 
 def pretty(x: str) -> str:
     s = str(x).lower().strip()
@@ -317,7 +314,7 @@ def ami_percent_for_income(region_key: str, hh_size: int, required_income: float
 
 # ===== Chart Utils =====
 def _bar_with_values(ax, labels, values, pad_ratio):
-    bars = ax.bar(labels, values, edgecolor="black")
+    bars = ax.bar(labels, values, color="#A7D3FF", edgecolor="black")
     for b in bars:
         y = b.get_height()
         ax.text(b.get_x()+b.get_width()/2, y * (1 + pad_ratio), fmt_money(y), ha="center", va="bottom", fontsize=10)
@@ -577,12 +574,23 @@ st.number_input(" ", min_value=min_income, max_value=max_income, step=1000,
                 key="user_income", format="%d", label_visibility="collapsed")
 user_income = float(st.session_state["user_income"])
 
-# White “Note” lines
-st.markdown(f'<div style="color:#FFFFFF;">Note – Min/Max income allowed for household size {household_size}: {fmt_money(min_income)} to {fmt_money(max_income)}</div>', unsafe_allow_html=True)
-st.markdown('<div style="color:#FFFFFF;">Note – Statewide Household Median Income: $85,000</div>', unsafe_allow_html=True)
+# Grey notes under the income entry
+st.markdown(
+    f'<div class="note">Minimum/maximum income allowed for this household size: '
+    f'{fmt_money(min_income)} to {fmt_money(max_income)}</div>',
+    unsafe_allow_html=True
+)
+st.write("")
 
-# Toggle to reveal results
-show_results = st.toggle("Let’s see how you did: view home", value=False, key="view_home_toggle")
+st.markdown(
+    '<div class="subnote">Note - <i>Statewide Median Household Income: $85,000</i></div>',
+    unsafe_allow_html=True
+)
+st.write("")
+
+# Subheading + switch
+st.markdown('<div class="results-subhead">Let’s see how you did</div>', unsafe_allow_html=True)
+show_results = st.toggle("View the home you built", value=False, key="view_home_toggle")
 
 # ===== Results (Graph + Messaging) =====
 if show_results:
@@ -666,11 +674,12 @@ if show_results:
                     )
                 st.write("")
 
-            # Compare controls (under 'Want to try again?')
-            st.markdown("**Want to try again? Compare a new home with your first attempt**")
-            compare_n = st.radio("", options=[1,2,3],
-                                 index={1:0,2:1,3:2}[st.session_state.num_units],
-                                 horizontal=True, label_visibility="collapsed")
+            st.markdown('<div class="compare-prompt">Want to try again? Compare a new home with your first attempt</div>', unsafe_allow_html=True)
+            compare_n = st.radio(
+                "", options=[1,2,3],
+                index={1:0,2:1,3:2}[st.session_state.num_units],
+                horizontal=True, label_visibility="collapsed"
+            )
             if compare_n != st.session_state.num_units:
                 st.session_state.num_units = compare_n
                 _ensure_and_get_units(); st.rerun()
