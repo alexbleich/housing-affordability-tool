@@ -78,41 +78,9 @@ def load_regions(files: dict) -> dict:
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
 
-# ---- UI CSS tweaks ----
-st.markdown("""
-<style>
-/* existing rules ... */
-
-/* Notes under Step 3 */
-.note {
-  color: #6B7280;           /* grey-500 */
-  font-size: 0.95rem;
-  margin: 0.15rem 0 0.1rem 0;  /* tight to the input */
-}
-.subnote {
-  color: #6B7280; 
-  font-size: 0.95rem;
-  margin: 0.15rem 0 0.4rem 0;  /* a little more spacing below */
-}
-
-/* "Let's see how you did" heading */
-.results-subhead {
-  font-size: 1.10rem;
-  font-weight: 700;
-  margin: 0.25rem 0 0.25rem 0; /* space above & below */
-}
-
-/* Tighten gap between 'Want to try again?' and radios */
-.compare-prompt {
-  margin: 0 0 0.10rem 0;
-  font-weight: 700;
-}
-</style>
-""", unsafe_allow_html=True)
-
 # ===== Helpers (display + options) =====
 PRETTY_OVERRIDES = {
-    # Housing types (for radio display only; bar labels use short names below)
+    # Step 1 radio labels (with arrow descriptions)
     "townhome":"Townhome  →  (ownership; individual entrance; generally larger than a condo)",
     "condo":"Condo  →  (ownership; entrance from a common corridor; generally smaller than a townhome)",
     "apartment":"Apartment  →  (rental; entrance from a common corridor; generally smaller than condo/townhome)",
@@ -142,10 +110,6 @@ def pretty(x: str) -> str:
 
 def pretty_short(x: str) -> str:
     return PRODUCT_SHORT.get(str(x).lower().strip(), str(x).title())
-
-def field_label(lead_text: str, rest: str = ""):
-    lead = lead_text.rstrip(":")
-    st.markdown(f'<div class="field-label"><span class="lead">{lead}</span>: {rest}</div>', unsafe_allow_html=True)
 
 def fmt_money(x):
     val = pd.to_numeric(x, errors="coerce")
@@ -314,7 +278,7 @@ def ami_percent_for_income(region_key: str, hh_size: int, required_income: float
 
 # ===== Chart Utils =====
 def _bar_with_values(ax, labels, values, pad_ratio):
-    bars = ax.bar(labels, values, color="#A7D3FF", edgecolor="black")
+    bars = ax.bar(labels, values, color="#A7D3FF", edgecolor="black")  # lighter blue
     for b in bars:
         y = b.get_height()
         ax.text(b.get_x()+b.get_width()/2, y * (1 + pad_ratio), fmt_money(y), ha="center", va="bottom", fontsize=10)
@@ -384,11 +348,7 @@ def _update_component(i, field, value):
     st.session_state.units[i]["components"][field] = value
 
 def _maybe_update_labels_on_product_change(old_prod: str, new_prod: str):
-    """
-    If a unit's label still matches the *default* shape for the old product,
-    rewrite it to the new product's short default (e.g., 'Townhome 1' -> 'Condo 1').
-    Custom labels are left untouched.
-    """
+    """If a unit's label still looks like the default for the old product, rewrite to the new product's short default."""
     if "units" not in st.session_state:
         return
     old_short = pretty_short(old_prod)
@@ -396,7 +356,7 @@ def _maybe_update_labels_on_product_change(old_prod: str, new_prod: str):
     for idx, u in enumerate(st.session_state.units):
         current = (u.get("custom_label") or "").strip()
         exact_short = f"{old_short} {idx+1}"
-        # Fuzzy match: starts with old product name, ends with the index (covers arrow/explanations)
+        # fuzzy: starts with old product & ends with idx (covers earlier long arrow labels)
         if current == exact_short or re.match(rf"^{re.escape(old_short)}.*\s{idx+1}\s*$", current):
             new_default = f"{new_short} {idx+1}"
             st.session_state.units[idx]["custom_label"] = new_default
@@ -412,35 +372,31 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
         if i > 0 and st.button("Duplicate from previous", key=f"dup_{i}", disabled=disabled):
             _duplicate_from_previous(i); st.rerun()
 
-        # Energy Code
+        st.markdown("**Energy Efficiency:** What energy code standard would you like to build to?")
         raw_codes = [o for o in options("energy_code", DEFAULT_PARENT) if o in set(ENERGY_CODE_ORDER)]
         opt_code = [c for c in ENERGY_CODE_ORDER if c in raw_codes] or ["vt_energy_code", "rbes", "passive_house"]
-        field_label("Energy Efficiency", "What energy code standard would you like to build to?")
         st.selectbox(" ", opt_code, format_func=pretty, key=f"code_{i}",
                      label_visibility="collapsed", disabled=disabled,
                      on_change=lambda: _update_component(i, "code", st.session_state[f"code_{i}"]))
 
-        # Energy Source
+        st.markdown("**Heating:** How would you like to heat the home?")
         opt_src = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
-        field_label("Heating", "How would you like to heat the home?")
         st.selectbox(" ", opt_src, format_func=pretty, key=f"src_{i}",
                      label_visibility="collapsed", disabled=disabled,
                      on_change=lambda: _update_component(i, "src", st.session_state[f"src_{i}"]))
 
-        # Finish quality (low → high; default = average)
+        st.markdown("**Quality:** How “nice” would you like the finish quality (kitchen, bathroom, flooring, etc.) to be?")
         opt_fin_all = options("finish_quality", DEFAULT_PARENT) or ["below_average","average","above_average"]
         order_map = {"below_average":0, "average":1, "above_average":2}
         opt_fin = sorted(set(opt_fin_all), key=lambda k: order_map.get(k, 99))
-        field_label("Quality", "How “nice” would you like the finish quality (kitchen, bathroom, flooring, etc.) to be?")
         st.selectbox(" ", opt_fin,
                      index=opt_fin.index("average") if "average" in opt_fin else 0,
                      format_func=pretty, key=f"fin_{i}",
                      label_visibility="collapsed", disabled=disabled,
                      on_change=lambda: _update_component(i, "fin", st.session_state[f"fin_{i}"]))
 
-        # Location toggle (renamed)
+        st.markdown("**Location:** In a new neighborhood")
         current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
-        field_label("Location", "In a new neighborhood")
         toggle_val = st.toggle(" ", value=(current_infra_opt == "yes"),
                                key=f"infra_toggle_{i}", label_visibility="collapsed", disabled=disabled)
         new_infra_opt = bool_to_infra_opt(toggle_val)
@@ -448,19 +404,17 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
             st.session_state[f"infra_{i}"] = new_infra_opt
             _update_component(i, "infra", new_infra_opt)
 
-        # Advanced components (Bar label lives here)
         with st.expander("Advanced components", expanded=False):
             default_label = f"{pretty_short(product)} {i+1}"
             if not st.session_state.get(f"label_{i}"):
                 st.session_state[f"label_{i}"] = st.session_state.units[i].get("custom_label", default_label)
-            field_label("Bar label")
+            st.markdown("**Bar label**")
             st.session_state.units[i]["custom_label"] = st.text_input(
                 " ", value=st.session_state[f"label_{i}"], key=f"label_{i}",
                 label_visibility="collapsed", disabled=disabled
             )
             st.caption("Extras configured in data when available (e.g., Solar, Covered Parking).")
 
-    # Final label
     label = st.session_state.units[i].get("custom_label", f"{pretty_short(product)} {i+1}")
     return {"label": label, "code": st.session_state[f"code_{i}"], "src": st.session_state[f"src_{i}"],
             "infra": st.session_state[f"infra_{i}"], "fin": st.session_state[f"fin_{i}"]}
@@ -469,66 +423,41 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
 st.title("🏘️ Housing Affordability Visualizer")
 st.write("This tool allows you to see how housing policy directly impacts whether Vermonters at various income levels are able to afford housing.")
 st.write("“Build” one type of housing or compare multiple. Can you afford new construction in Vermont?")
+
+# Top link bar (tiny HTML only to keep symmetric spaces around the bar)
 st.markdown(
-    '<div class="top-links">'
-    '<a href="https://github.com/alexbleich/housing-affordability-tool" target="_blank">View all assumptions and code here</a>'
-    '<span class="sep">|</span>'
-    '<a href="https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf" target="_blank">VHFA Affordability Data</a>'
-    '</div>',
+    '[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)'
+    ' &nbsp;|&nbsp; '
+    '[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)',
     unsafe_allow_html=True
 )
 st.write("")
 
 # ===== Step 1 – Choose the Housing Type =====
 st.header("Step 1 – Choose the Housing Type")
-
 prev_prod = st.session_state.get("global_product_prev", "townhome")
-
-st.markdown(
-    '<p class="step-prompt"><strong>What kind of housing are we talking about?</strong></p>',
-    unsafe_allow_html=True
-)
-
-product = st.radio(
-    " ",
-    ["townhome", "condo", "apartment"],
-    format_func=pretty,
-    horizontal=False,
-    key="global_product",
-    label_visibility="collapsed",
-)
+st.markdown("**What kind of housing are we talking about?**")
+product = st.radio(" ", ["townhome","condo","apartment"], format_func=pretty,
+                   horizontal=False, key="global_product", label_visibility="collapsed")
 
 if product != prev_prod:
     _maybe_update_labels_on_product_change(prev_prod, product)
     st.session_state["global_product_prev"] = product
 
-st.write("")
-
+st.write("")  # tiny gap
 apartment_mode = (product == "apartment")
 
 if not apartment_mode:
-    st.markdown(
-        '<p class="sub-prompt"><strong>Number of bedrooms</strong></p>',
-        unsafe_allow_html=True
-    )
-    br_opts = ["1", "2", "3", "4"] if product == "townhome" else ["1", "2", "3"]
-    bedrooms = st.radio(
-        " ",
-        br_opts,
-        index=br_opts.index("2") if "2" in br_opts else 0,
-        format_func=pretty,
-        horizontal=True,
-        key="global_bedrooms",
-        label_visibility="collapsed",
-    )
-    # Pull sqft from assumptions (falls back to 1000 if missing)
+    st.markdown("**Number of bedrooms**")
+    br_opts = ["1","2","3","4"] if product == "townhome" else ["1","2","3"]
+    bedrooms = st.radio(" ", br_opts, index=br_opts.index("2") if "2" in br_opts else 0,
+                        format_func=pretty, horizontal=True, key="global_bedrooms",
+                        label_visibility="collapsed")
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
-    st.info(
-        "Apartment modeling (rent-based) coming soon. "
-        "For now, choose Townhome or Condo to compare for-sale products."
-    )
+    st.info("Apartment modeling (rent-based) coming soon. For now, choose Townhome or Condo to compare for-sale products.")
+
 st.divider()
 
 # ===== Step 2 – How do you want the housing built? =====
@@ -574,35 +503,24 @@ st.number_input(" ", min_value=min_income, max_value=max_income, step=1000,
                 key="user_income", format="%d", label_visibility="collapsed")
 user_income = float(st.session_state["user_income"])
 
-# Grey notes under the income entry
-st.markdown(
-    f'<div class="note">Minimum/maximum income allowed for this household size: '
-    f'{fmt_money(min_income)} to {fmt_money(max_income)}</div>',
-    unsafe_allow_html=True
-)
-st.write("")
+# Notes (no HTML)
+st.caption(f"Minimum/maximum income allowed for this household size: {fmt_money(min_income)} to {fmt_money(max_income)}")
+st.write("")  # spacer
+st.caption("Note - *Statewide Median Household Income: $85,000*")
+st.write("")  # spacer before results
 
-st.markdown(
-    '<div class="subnote">Note - <i>Statewide Median Household Income: $85,000</i></div>',
-    unsafe_allow_html=True
-)
-st.write("")
-
-# Subheading + switch
-st.markdown('<div class="results-subhead">Let’s see how you did</div>', unsafe_allow_html=True)
+st.subheader("Let’s see how you did")
 show_results = st.toggle("View the home you built", value=False, key="view_home_toggle")
 
 # ===== Results (Graph + Messaging) =====
 if show_results:
     if not apartment_mode:
-        # Labels + TDCs
         labels, tdc_vals = [], []
         for idx, u in enumerate(units):
             label = u["label"] or f"{pretty_short(product)} {idx+1}"
             labels.append(label)
             tdc_vals.append(compute_tdc(sf, product, u["code"], u["src"], u["infra"], u["fin"]))
 
-        # Chittenden mapping
         p2i, i2p, *_ = build_price_income_transformers("Chittenden", int(household_size), int(bedrooms))
         if p2i is None or i2p is None:
             st.warning("Not enough data to build the price↔income mapping for this selection.")
@@ -610,7 +528,6 @@ if show_results:
             afford_price = float(i2p(np.array([user_income]))[0])
             draw_chart(labels, tdc_vals, afford_price, p2i, i2p)
 
-            # Success / Failure messages with labels
             prices = np.asarray(tdc_vals, dtype=float)
             req_incomes = p2i(prices)
             mask = affordable_mask(user_income, req_incomes)
@@ -618,29 +535,24 @@ if show_results:
 
             if len(labels) == 1:
                 if len(affordable_labels) == 1:
-                    msg = "Congrats! The total development cost of this home is less than the income required to buy it."
-                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ <b>{msg}</b></div>'
+                    st.success("Congrats! The total development cost of this home is less than the income required to buy it.")
                 else:
-                    msg = "Not quite! This home is unaffordable for the household income you entered."
-                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">❌ <b>{msg}</b></div>'
-                st.markdown(html, unsafe_allow_html=True)
+                    st.error("Not quite! This home is unaffordable for the household income you entered.")
             else:
                 k = len(affordable_labels)
                 if k == 0:
-                    msg = "Not quite! These homes are unaffordable for the household income you entered."
-                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#FDECEA;color:#B71C1C;border:1px solid #F5C6CB;">❌ <b>{msg}</b></div>'
+                    st.error("Not quite! These homes are unaffordable for the household income you entered.")
                 elif k == len(labels):
-                    msg = "Congrats! The total development cost for all options are less than the income required to buy them."
-                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ <b>{msg}</b></div>'
+                    st.success("Congrats! The total development cost for all options are less than the income required to buy them.")
                 elif k == 1:
-                    msg = f"Congrats! The total development cost for <b>{affordable_labels[0]}</b> is less than the income required to buy it."
-                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ {msg}</div>'
+                    st.success(f"Congrats! The total development cost for **{affordable_labels[0]}** is less than the income required to buy it.")
                 else:  # k == 2
-                    msg = f"Congrats! The total development cost for <b>{affordable_labels[0]}</b> & <b>{affordable_labels[1]}</b> are less than the income required to buy them."
-                    html = f'<div style="padding:0.6rem 0.8rem;border-radius:8px;background:#E6F4EA;color:#1E7D34;border:1px solid #C8E6C9;">✅ {msg}</div>'
-                st.markdown(html, unsafe_allow_html=True)
+                    st.success(
+                        f"Congrats! The total development cost for **{affordable_labels[0]}** & **{affordable_labels[1]}** "
+                        "are less than the income required to buy them."
+                    )
 
-            # Spacer
+            # Space between callout and info boxes
             st.write("")
 
             # "More About ..." boxes
@@ -649,42 +561,43 @@ if show_results:
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
                 with st.container(border=True):
                     st.subheader(title)
-                    lines = []
+
+                    # AMI lines for three regions with capping text
+                    bullets = []
+                    bullets.append(f"You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
+                    bullets.append("This is only affordable for **0 of the 270,000 households in Vermont**.")
+                    sublines = []
                     for rp in ["Chittenden", "Addison", "Rest of Vermont"]:
                         reg_key_line = PRETTY2REG[rp]
                         pct, capped = ami_percent_for_income(reg_key_line, int(household_size), req_inc)
+                        suffix = " (at least)" if (pct is not None and capped) else ""
                         if pct is None:
-                            text = f"—% of AMI in {rp}"
+                            line = f"—% of AMI in {rp}"
+                        elif rp == "Rest of Vermont":
+                            line = f"**{pct}% of AMI in the rest of Vermont{suffix}.**"
                         else:
-                            suffix = " (at least)" if capped else ""
-                            if rp == "Rest of Vermont":
-                                text = f"**{pct}% of AMI in the rest of Vermont{suffix}.**"
-                            else:
-                                text = f"**{pct}% of Area Median Income in {rp}{suffix}.**"
-                        lines.append(text)
+                            line = f"**{pct}% of Area Median Income in {rp}{suffix}.**"
+                        sublines.append(line)
 
-                    st.markdown(
-                        "- " + f"You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.\n"
-                        "- " + "This is only affordable for **0 of the 270,000 households in Vermont**.\n"
-                        "- " + "To afford this home, you would need to make:\n"
-                        f"    - {lines[0]}\n"
-                        f"    - {lines[1]}\n"
-                        f"    - {lines[2]}",
-                        unsafe_allow_html=True
-                    )
+                    st.markdown("- " + bullets[0])
+                    st.markdown("- " + bullets[1])
+                    st.markdown("- To afford this home, you would need to make:")
+                    st.markdown(f"  - {sublines[0]}")
+                    st.markdown(f"  - {sublines[1]}")
+                    st.markdown(f"  - {sublines[2]}")
                 st.write("")
 
-            st.markdown('<div class="compare-prompt">Want to try again? Compare a new home with your first attempt</div>', unsafe_allow_html=True)
+            # Compare controls (tight; no extra blank line above radios)
+            st.markdown("**Want to try again? Compare a new home with your first attempt**")
             compare_n = st.radio(
-                "", options=[1,2,3],
-                index={1:0,2:1,3:2}[st.session_state.num_units],
-                horizontal=True, label_visibility="collapsed"
+                "",
+                options=[1, 2, 3],
+                index={1:0, 2:1, 3:2}[st.session_state.num_units],
+                horizontal=True,
+                label_visibility="collapsed"
             )
             if compare_n != st.session_state.num_units:
                 st.session_state.num_units = compare_n
                 _ensure_and_get_units(); st.rerun()
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
-
-st.write("")
-st.markdown("[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
