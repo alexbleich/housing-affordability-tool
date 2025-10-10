@@ -474,16 +474,13 @@ st.write("")
 # ===== Step 1 – Choose the Housing Type =====
 st.header("Step 1 – Choose the Housing Type")
 
-# Track previous selection so we can relabel defaults when product changes
 prev_prod = st.session_state.get("global_product_prev", "townhome")
 
-# Prompt (tight spacing)
 st.markdown(
     '<p class="step-prompt"><strong>What kind of housing are we talking about?</strong></p>',
     unsafe_allow_html=True
 )
 
-# Housing type (vertical; pretty() shows arrow + descriptions)
 product = st.radio(
     " ",
     ["townhome", "condo", "apartment"],
@@ -493,7 +490,6 @@ product = st.radio(
     label_visibility="collapsed",
 )
 
-# If product changed, rewrite any default-like bar labels to new short names
 if product != prev_prod:
     _maybe_update_labels_on_product_change(prev_prod, product)
     st.session_state["global_product_prev"] = product
@@ -503,12 +499,10 @@ st.write("")
 apartment_mode = (product == "apartment")
 
 if not apartment_mode:
-    # Bedrooms prompt (smaller)
     st.markdown(
         '<p class="sub-prompt"><strong>Number of bedrooms</strong></p>',
         unsafe_allow_html=True
     )
-    # 1–4 for townhomes; 1–3 for condos
     br_opts = ["1", "2", "3", "4"] if product == "townhome" else ["1", "2", "3"]
     bedrooms = st.radio(
         " ",
@@ -527,7 +521,6 @@ else:
         "Apartment modeling (rent-based) coming soon. "
         "For now, choose Townhome or Condo to compare for-sale products."
     )
-
 st.divider()
 
 # ===== Step 2 – How do you want the housing built? =====
