@@ -75,36 +75,24 @@ def load_regions(files: dict[str, Path]) -> dict[str, pd.DataFrame]:
         out[name] = d
     return out
 
-@st.cache_data(show_spinner=False)
-def load_income_dist(csv_path: Path) -> pd.DataFrame:
-    df = pd.read_csv(csv_path)
-    df["hh_income"]   = pd.to_numeric(df["hh_income"], errors="coerce")
-    df["num_hhs"]     = pd.to_numeric(df["num_hhs"], errors="coerce")
-    df["percent_hhs"] = (
-        pd.to_numeric(df["percent_hhs"].astype(str).str.replace("%", "", regex=False), errors="coerce") / 100.0
-    )
-    df = df.sort_values("hh_income").reset_index(drop=True)
-    df["cum_num_at_or_above"] = df["num_hhs"][::-1].cumsum()[::-1]
-    df["cum_pct_at_or_above"] = df["percent_hhs"][::-1].cumsum()[::-1]
-    return df
+@st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: str(p)})
+def _load_vt_income_dist(p: Path) -> pd.DataFrame:
+    df = pd.read_csv(p)
+    df.columns = df.columns.str.strip().str.lower()
+    for c in ("hh_income", "num_hhs", "percent_hhs"):
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+    return df.sort_values("hh_income").reset_index(drop=True)
 
-INCOME_DIST_CSV = PATHS.data / "vt_inc_dist.csv"
-INCOME_DF = load_income_dist(INCOME_DIST_CSV)
-
-def households_share_at_or_above(required_income: float, denom: int = 270_000) -> tuple[int, int]:
-    """
-    Returns (x_scaled_to_270k, percent_0_100) for incomes >= required_income.
-    Uses the first bracket whose upper bound >= threshold, then sums all above.
-    """
-    df = INCOME_DF
-    hit = df.index[df["hh_income"] >= float(required_income)]
-    if len(hit) == 0:
-        return 0, 0
-    i = int(hit.min())
-    frac = float(df.loc[i, "cum_pct_at_or_above"])
-    x_scaled = int(round(denom * frac))
-    pct_disp = int(round(frac * 100))
-    return x_scaled, pct_disp
+def households_share_at_or_above(required_income: float,
+                                 denom_total_hhs: int = 270_000,
+                                 csv_path: Path = DATA / "vt_inc_dist.csv") -> tuple[int, str]:
+    df = _load_vt_income_dist(csv_path)
+    thr = float(required_income)
+    mask = df["hh_income"] > thr  # strict '>' fixes boundary overcount
+    count = int(df.loc[mask, "num_hhs"].sum())
+    pct = (count / float(denom_total_hhs)) * 100.0 if denom_total_hhs else 0.0
+    pct_str = f"{pct:.1f}".rstrip("0").rstrip(".")
+    return count, pct_str
 
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
@@ -584,7 +572,7 @@ if show_results:
                 
                     lines = []
                     lines.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
-                    lines.append(f"- This is only affordable for **{x_hhs:,} of the 270,000 ({pct_display}%) households** in Vermont.")
+                    lines.append(f"- This is only affordable for about **{x_hhs:,} of the ~270,000 ({pct_display}%) households** in Vermont.")
                     lines.append("- To afford this home, you would need to make:")
                 
                     sub_lines = []
