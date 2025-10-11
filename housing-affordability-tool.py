@@ -535,12 +535,16 @@ else:
 with st.container(border=True):
     st.subheader("**Before choosing household size, you should know...**")
     st.markdown("- 2.4 = Average VT household size")
-    st.markdown("- 70% = Proportion of VTers living in 1- or 2-person households")
+    st.markdown("- 70% = Proportion of Vermonters living in 1- or 2-person households")
     st.subheader("**Before choosing household income, you should know...**")
     st.markdown(f"- {money_md(85000)} = Statewide Median Household Income")
+    st.write("**Average pay for priority professions in Vermont:**")
     st.markdown(
-        f"- {money_md(inc_min_box)} to {money_md(inc_max_box)} = "
-        f"minimum/maximum income allowed for this household size."
+        f"- Early-childhood educator: ~{money_md(42000)}"
+        f"- School-age teacher: ~{money_md(55000)}"
+        f"- Firefighter/police officer: ~{money_md(70000)}"
+        f"- Plumber/electrician: ~{money_md(75000)}"
+        f"- RN @ UVM Medical: ~{money_md(90000)}"
     )
 
 household_size = st.radio(
@@ -560,6 +564,10 @@ else:
     min_income, max_income = 20000, 300000
 
 st.write("How much do you think a Vermont household needs to make to afford this home?")
+st.caption(
+    f"- {money_md(inc_min_box)} to {money_md(inc_max_box)} = "
+    f"minimum/maximum income allowed for this household size."
+)
 default_income = int(np.clip(100000, min_income, max_income))
 if "user_income" not in st.session_state:
     st.session_state["user_income"] = default_income
