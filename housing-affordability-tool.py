@@ -539,7 +539,7 @@ with st.container(border=True):
 
     st.subheader("**Before choosing *household income*, you should know...**")
     st.markdown(
-        f"- *{money_md(85260)}* = Statewide Median Household Income, [2024]"
+        f"- {money_md(85260)} = Statewide Median Household Income, [2024]"
         "(https://fred.stlouisfed.org/series/MEHOINUSVTA672N)"
     )
     st.markdown(
