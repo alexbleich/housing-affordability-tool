@@ -75,6 +75,37 @@ def load_regions(files: dict[str, Path]) -> dict[str, pd.DataFrame]:
         out[name] = d
     return out
 
+@st.cache_data(show_spinner=False)
+def load_income_dist(csv_path: Path) -> pd.DataFrame:
+    df = pd.read_csv(csv_path)
+    df["hh_income"]   = pd.to_numeric(df["hh_income"], errors="coerce")
+    df["num_hhs"]     = pd.to_numeric(df["num_hhs"], errors="coerce")
+    df["percent_hhs"] = (
+        pd.to_numeric(df["percent_hhs"].astype(str).str.replace("%", "", regex=False), errors="coerce") / 100.0
+    )
+    df = df.sort_values("hh_income").reset_index(drop=True)
+    df["cum_num_at_or_above"] = df["num_hhs"][::-1].cumsum()[::-1]
+    df["cum_pct_at_or_above"] = df["percent_hhs"][::-1].cumsum()[::-1]
+    return df
+
+INCOME_DIST_CSV = PATHS.data / "vt_inc_dist.csv"
+INCOME_DF = load_income_dist(INCOME_DIST_CSV)
+
+def households_share_at_or_above(required_income: float, denom: int = 270_000) -> tuple[int, int]:
+    """
+    Returns (x_scaled_to_270k, percent_0_100) for incomes >= required_income.
+    Uses the first bracket whose upper bound >= threshold, then sums all above.
+    """
+    df = INCOME_DF
+    hit = df.index[df["hh_income"] >= float(required_income)]
+    if len(hit) == 0:
+        return 0, 0
+    i = int(hit.min())
+    frac = float(df.loc[i, "cum_pct_at_or_above"])
+    x_scaled = int(round(denom * frac))
+    pct_disp = int(round(frac * 100))
+    return x_scaled, pct_disp
+
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
 
@@ -547,12 +578,13 @@ if show_results:
             for idx, label in enumerate(labels):
                 req_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
+                x_hhs, pct_display = households_share_at_or_above(req_inc, denom=270_000)
                 with st.container(border=True):
                     st.subheader(title)
                 
                     lines = []
                     lines.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
-                    lines.append("- This is only affordable for **0 of the 270,000 households** in Vermont.")
+                    lines.append(f"- This is only affordable for **{x_hhs:,} of the 270,000 ({pct_display}%) households** in Vermont.")
                     lines.append("- To afford this home, you would need to make:")
                 
                     sub_lines = []
