@@ -87,17 +87,12 @@ def households_share_at_or_above(
     required_income: float,
     denom_total_hhs: int = 270_000,
     csv_path: Path = DATA / "vt_inc_dist.csv",
-    denom: int | None = None,
-) -> tuple[int, str]:
-    if denom is not None:
-        denom_total_hhs = denom
+) -> tuple[int, float]:
     df = _load_vt_income_dist(csv_path)
     thr = float(required_income)
-    mask = df["hh_income"] > thr
-    count = int(df.loc[mask, "num_hhs"].sum())
+    count = int(df.loc[df["hh_income"] > thr, "num_hhs"].sum())
     pct = (count / float(denom_total_hhs)) * 100.0 if denom_total_hhs else 0.0
-    pct_str = f"{pct:.0f}".rstrip("0").rstrip(".")
-    return count, pct_str
+    return count, pct
 
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
@@ -571,15 +566,16 @@ if show_results:
             for idx, label in enumerate(labels):
                 req_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
-                x_hhs, pct_display = households_share_at_or_above(req_inc, denom=270_000)
-                with st.container(border=True):
+                x_hhs, pct_float = households_share_at_or_above(req_inc, denom_total_hhs=270_000)
+                pct_display = f"{pct_float:.0f}"
                     st.subheader(title)
                 
                     lines = []
                     lines.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
-                    lines.append(f"- This is only affordable for about **{x_hhs:,} of the ~270,000 ({pct_display}%) households** in [Vermont]"
-                                f"(https://www.incomebyzipcode.com/vermont#families)."
-                                )
+                    lines.append(
+                        f"- This is only affordable for about **{x_hhs:,} of the ~270,000 ({pct_display}%) households** in "
+                        f"[Vermont](https://www.incomebyzipcode.com/vermont#families)."
+                    )
                     lines.append("- To afford this home, you would need to make:")
                 
                     sub_lines = []
