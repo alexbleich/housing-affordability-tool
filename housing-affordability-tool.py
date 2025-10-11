@@ -141,6 +141,17 @@ def fmt_money(x) -> str:
         return "—"
     return f"${int(round(v)):,}"
 
+def money_md(x: float | int | str) -> str:
+    """Return a Markdown-safe $ with comma thousands (no LaTeX)."""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        v = pd.to_numeric(x, errors="coerce")
+    if pd.isna(v):
+        return "—"
+    return f"\\${int(round(v)):,}"
+
+
 def _rows(cat, opt=None, parent=None):
     q = A["category"].eq(cat)
     if parent is not None: q &= A["parent_option"].eq(str(parent).lower())
@@ -524,10 +535,10 @@ else:
 with st.container(border=True):
     st.subheader("Context for this step")
     st.markdown("- 2.4 = Average VT household size; 70% of VTers are in 1- or 2-person households")
-    st.markdown("- $85,000 = Statewide Median Household Income")
+    st.markdown(f"- {money_md(85000)} = Statewide Median Household Income")
     st.markdown(
         f"- *Minimum/maximum income allowed for this household size:* "
-        f"{fmt_money(inc_min_box)} to {fmt_money(inc_max_box)}"
+        f"{money_md(inc_min_box)} to {money_md(inc_max_box)}"
     )
 
 household_size = st.radio(
