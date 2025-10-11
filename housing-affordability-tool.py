@@ -533,12 +533,16 @@ st.number_input(
 )
 user_income = float(st.session_state["user_income"])
 
-# Note 1 (grey) + spacer
-st.write(
+# Grey note (caption) directly under the entry
+st.caption(
     f"Minimum/maximum income allowed for this household size: "
-    f"{fmt_money(min_income)} – {fmt_money(max_income)}")
-st.write("Note - *Statewide Median Household Income: $85,000*")
+    f"{fmt_money(min_income)} to {fmt_money(max_income)}. ")
+st.write("")
 
+st.write("Note – *Statewide Median Household Income: $85,000*")
+st.write("Average VT household size is 2.4; ~70% of Vermonters are in 1- or 2-person households.")
+
+st.write("")
 st.subheader("Let’s see how you did!")
 show_results = st.toggle("View the home you built", value=False, key="view_home_toggle")
 
