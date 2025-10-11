@@ -546,11 +546,11 @@ with st.container(border=True):
     st.markdown(
         "**Average pay for priority professions in Vermont:**\n"
         + "\n".join([
-            f"- ~{money_md(42000)} = Early-childhood educator",
-            f"- ~{money_md(55000)} = School-age teacher",
-            f"- ~{money_md(70000)} = Firefighter/police officer",
-            f"- ~{money_md(75000)} = Plumber/electrician",
-            f"- ~{money_md(90000)} = RN @ UVM Medical",
+            f"    - ~{money_md(42000)} = Early-childhood educator",
+            f"    - ~{money_md(55000)} = School-age teacher",
+            f"    - ~{money_md(70000)} = Firefighter/police officer",
+            f"    - ~{money_md(75000)} = Plumber/electrician",
+            f"    - ~{money_md(90000)} = RN @ UVM Medical",
         ])
     )
 
