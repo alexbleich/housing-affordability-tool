@@ -1,34 +1,44 @@
-# ===== Imports & Paths =====
+# ===== Imports & Paths (pre-helpers) =====
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter, MaxNLocator
 from dataclasses import dataclass
 import re
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter, MaxNLocator
 
-# ===== Constants & Files =====
+# ----- Robust project paths -----
 @dataclass(frozen=True)
 class Paths:
     root: Path
     data: Path
     assumptions: Path
 
-ROOT = Path(__file__).parent
-PATHS = Paths(root=ROOT, data=ROOT / "data", assumptions=ROOT / "data" / "assumptions.csv")
+ROOT = Path(__file__).parent if "__file__" in globals() else Path.cwd()
+PATHS = Paths(
+    root=ROOT,
+    data=ROOT / "data",
+    assumptions=ROOT / "data" / "assumptions.csv",
+)
 
 DATA = PATHS.data
 ASSUMP = PATHS.assumptions
 
+# ----- Region CSVs -----
 REGIONS = {
     "Chittenden": DATA / "chittenden_ami.csv",
     "Addison":    DATA / "addison_ami.csv",
     "Vermont":    DATA / "vermont_ami.csv",  # Rest of Vermont
 }
-REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "Rest of Vermont"}
+REGION_PRETTY = {
+    "Chittenden": "Chittenden",
+    "Addison": "Addison",
+    "Vermont": "Rest of Vermont",
+}
 PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 
+# ----- Constants used downstream -----
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
 AFFORD_EPS = 0.5
@@ -39,31 +49,43 @@ DEFAULT_COMPONENTS = dict(code="vt_energy_code", src="natural_gas", infra="no", 
 # ===== Data Loading =====
 @st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: str(p)})
 def load_assumptions(p: Path) -> pd.DataFrame:
+    """
+    Load assumptions.csv (columns: category,parent_option,option,value_type,value).
+    - All string ids are normalized to lowercase & stripped.
+    - value_type normalized to {per_sf, per_unit, fixed}.
+    - 'value' is numeric; blanks are kept as NaN so UI can hide items without costs yet.
+    """
     if not p.exists():
         st.error(f"Missing assumptions file: {p}"); st.stop()
+
     df = pd.read_csv(p)
     df.columns = df.columns.str.strip().str.lower()
-    must_have = {"category","parent_option","option","value_type","value"}
-    missing = must_have - set(df.columns)
+
+    required = {"category", "parent_option", "option", "value_type", "value"}
+    missing = required - set(df.columns)
     if missing:
         st.error(f"Assumptions CSV missing columns: {missing}"); st.stop()
-    for c in ("category","parent_option","option","value_type"):
-        df[c] = df[c].astype(str).str.strip().str.lower()
+
+    for c in ("category", "parent_option", "option", "value_type"):
+        df[c] = df[c].astype(str).strip().str.lower()
 
     def _norm_vtype(s: str) -> str:
-        t = s.replace("_","").replace("-","").replace(" ","")
-        if t in {"persf","psf","sf"}: return "per_sf"
-        if t in {"perunit"}:         return "per_unit"
-        if t in {"fixed","flat","lump","fixedcost"}: return "fixed"
+        t = s.replace("_", "").replace("-", "").replace(" ", "")
+        if t in {"persf", "psf", "sf"}:   return "per_sf"
+        if t in {"perunit"}:              return "per_unit"
+        if t in {"fixed", "flat", "lump", "fixedcost"}: return "fixed"
         return s
 
     df["value_type"] = df["value_type"].map(_norm_vtype)
-    df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0.0)
+    df["value"] = pd.to_numeric(df["value"], errors="coerce")
     return df
 
 @st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: str(p)})
-def load_regions(files: dict) -> dict:
-    out = {}
+def load_regions(files: dict[str, Path]) -> dict[str, pd.DataFrame]:
+    """
+    Load region affordability tables; ensure 'ami' exists and coerce numeric columns.
+    """
+    out: dict[str, pd.DataFrame] = {}
     for name, p in files.items():
         if not p.exists():
             st.error(f"Missing region file for {name}: {p}"); st.stop()
@@ -72,6 +94,9 @@ def load_regions(files: dict) -> dict:
         if AMI_COL not in d.columns:
             st.error(f"Region file {name} missing '{AMI_COL}' column."); st.stop()
         d[AMI_COL] = pd.to_numeric(d[AMI_COL], errors="coerce")
+        for col in d.columns:
+            if re.match(r"(buy|rent|income)\d+$", col):
+                d[col] = pd.to_numeric(d[col], errors="coerce")
         out[name] = d
     return out
 
@@ -80,22 +105,17 @@ R = load_regions(REGIONS)
 
 # ===== Helpers (display + options) =====
 PRETTY_OVERRIDES = {
-    # Step 1 radio labels (with arrow descriptions)
     "townhome":"Townhome  →  (ownership; individual entrance; generally larger than a condo)",
     "condo":"Condo  →  (ownership; entrance from a common corridor; generally smaller than a townhome)",
     "apartment":"Apartment  →  (rental; entrance from a common corridor; generally smaller than condo/townhome)",
     "studio":"Studio",
-    # Energy code
     "vt_energy_code":"Regionally standard energy code",
     "rbes":"Vermont’s 2024 RBES code (Residential Building Energy Standard)",
     "passive_house":"Passive House Standard",
-    # Energy sources
     "natural_gas":"Natural Gas",
     "all_electric":"All Electric",
     "geothermal":"Geothermal",
-    # Finish quality
     "below_average":"Below Average","average":"Average","above_average":"Above Average",
-    # Yes/No
     "yes":"Yes","no":"No",
 }
 PRODUCT_SHORT = {"townhome": "Townhome", "condo": "Condo", "apartment": "Apartment"}
@@ -115,27 +135,36 @@ def fmt_money(x):
     val = pd.to_numeric(x, errors="coerce")
     return "—" if pd.isna(val) else f"${val:,.0f}"
 
-def options(cat, parent=None):
-    q = A["category"].eq(cat)
-    if parent is not None: q &= A["parent_option"].eq(str(parent).lower())
-    return A.loc[q, "option"].tolist()
-
 def _rows(cat, opt=None, parent=None):
     q = A["category"].eq(cat)
     if parent is not None: q &= A["parent_option"].eq(str(parent).lower())
     if opt    is not None: q &= A["option"].eq(str(opt).lower())
     return A.loc[q]
 
+def options(cat, parent=None):
+    q = A["category"].eq(cat)
+    if parent is not None: q &= A["parent_option"].eq(str(parent).lower())
+    return A.loc[q, "option"].tolist()
+
 def one_val(cat, opt, parent=None, expect_type=None, default=0.0):
     r = _rows(cat, opt, parent)
     if r.empty and parent is not None: r = _rows(cat, opt)
     if r.empty: return default
     if expect_type and r.iloc[0]["value_type"] != expect_type: return default
-    return float(r.iloc[0]["value"])
+    return float(pd.to_numeric(r.iloc[0]["value"], errors="coerce"))
 
 def bedroom_sf(h_type, br_label):
     r = _rows("bedrooms", br_label, h_type)
-    return float(r.iloc[0]["value"]) if not r.empty else np.nan
+    return float(pd.to_numeric(r.iloc[0]["value"], errors="coerce")) if not r.empty else np.nan
+
+def bedroom_options(product_key: str) -> list[str]:
+    """Use the CSV to decide which bedroom counts to show (e.g., no 1-BR townhomes)."""
+    rows = _rows("bedrooms", parent=product_key)
+    if rows.empty:
+        # sensible fallback
+        return ["2","3","4"] if product_key == "townhome" else ["1","2","3"]
+    opts = sorted(rows["option"].astype(str).tolist(), key=lambda x: int(x))
+    return opts
 
 # ===== Cost model pieces =====
 def mf_factor(h_type): return one_val("mf_efficiency_factor","default",h_type, default=1.0)
@@ -155,7 +184,8 @@ def _sum_values(cat, opt, parents, vtype):
           (A["option"].eq(str(opt).lower())) &
           (A["parent_option"].isin([p.lower() for p in parents])) &
           (A["value_type"].eq(vtype))]
-    return float(r["value"].sum()) if not r.empty else 0.0
+    # robust to NaN in new file
+    return float(pd.to_numeric(r["value"], errors="coerce").fillna(0.0).sum()) if not r.empty else 0.0
 
 def _sum_overlay(cat, selected_opt, parents):
     per_sf  = _sum_values(cat, selected_opt, parents, "per_sf")  + _sum_values(cat, "default", parents, "per_sf")
@@ -173,26 +203,23 @@ def compute_tdc(sf, htype, code, src, infra, fin):
     """
     parents = [htype, "default"]
 
-    # HARD per sf (with soft cost multiplier)
     base_hard_psf = baseline_hard_per_sf()
     mf_mult  = mf_factor(htype)
     pct_mult = (one_val("energy_code", code) + one_val("finish_quality", fin)) / 100.0
     hard_psf_before_soft = base_hard_psf * (mf_mult + pct_mult)
     hard_psf = hard_psf_before_soft * (1.0 + soft_cost_pct()/100.0)
 
-    # Overlays
     es_psf, es_pu, es_fx = _sum_overlay("energy_source", src, parents)
 
-    # Other categories (default rows) excluding known ones + acquisition
     EXCLUDE = {"baseline_hard_cost","soft_cost","mf_efficiency_factor",
                "energy_code","finish_quality","energy_source","new_neighborhood","bedrooms",
                "acq_cost"}
     other = A[~A["category"].isin(EXCLUDE)]
     other = other[(other["option"].eq("default")) & (other["parent_option"].isin([htype, "default"]))]
 
-    other_psf  = float(other.loc[other["value_type"].eq("per_sf"), "value"].sum()) if not other.empty else 0.0
-    other_pu   = float(other.loc[other["value_type"].eq("per_unit"), "value"].sum()) if not other.empty else 0.0
-    other_fx   = float(other.loc[other["value_type"].eq("fixed"), "value"].sum()) if not other.empty else 0.0
+    other_psf  = float(pd.to_numeric(other.loc[other["value_type"].eq("per_sf"), "value"], errors="coerce").fillna(0.0).sum()) if not other.empty else 0.0
+    other_pu   = float(pd.to_numeric(other.loc[other["value_type"].eq("per_unit"), "value"], errors="coerce").fillna(0.0).sum()) if not other.empty else 0.0
+    other_fx   = float(pd.to_numeric(other.loc[other["value_type"].eq("fixed"), "value"], errors="coerce").fillna(0.0).sum()) if not other.empty else 0.0
 
     infra_pu = infra_per_unit(htype, infra) if infra in ("yes", "no") else 0.0
 
@@ -314,15 +341,13 @@ def _ami_phrase(pct: int|None, region_label: str, capped_low: bool, capped_high:
     if pct is None:
         return f"—% of AMI in {region_label}"
     if capped_high:
-        if region_label == "Rest of Vermont":
-            return f"**More than 150% of AMI in the rest of Vermont.**"
-        else:
-            return f"**More than 150% of Area Median Income in {region_label}.**"
+        return (f"More than 150% of AMI in the rest of Vermont."
+                if region_label == "Rest of Vermont"
+                else f"More than 150% of Area Median Income in {region_label}.")
     suffix = " (at least)" if capped_low else ""
-    if region_label == "Rest of Vermont":
-        return f"**{pct}% of AMI in the rest of Vermont{suffix}.**"
-    else:
-        return f"**{pct}% of Area Median Income in {region_label}{suffix}.**"
+    return (f"{pct}% of AMI in the rest of Vermont{suffix}."
+            if region_label == "Rest of Vermont"
+            else f"{pct}% of Area Median Income in {region_label}{suffix}.")
 
 # ===== Session State (units) =====
 def _ensure_units(n, product_key="townhome"):
@@ -345,19 +370,6 @@ def _duplicate_from_previous(i):
         "custom_label": prev.get("custom_label"),
     }
 
-def _prime_unit_widget_keys(i):
-    u = st.session_state.units[i]
-    defaults = {
-        f"code_{i}":  u["components"]["code"],
-        f"src_{i}":   u["components"]["src"],
-        f"infra_{i}": u["components"]["infra"],
-        f"fin_{i}":   u["components"]["fin"],
-        f"label_{i}": u.get("custom_label", ""),
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
 def _update_component(i, field, value):
     st.session_state.units[i]["components"][field] = value
 
@@ -370,7 +382,6 @@ def _maybe_update_labels_on_product_change(old_prod: str, new_prod: str):
     for idx, u in enumerate(st.session_state.units):
         current = (u.get("custom_label") or "").strip()
         exact_short = f"{old_short} {idx+1}"
-        # fuzzy: starts with old product & ends with idx (covers earlier long arrow labels)
         if current == exact_short or re.match(rf"^{re.escape(old_short)}.*\s{idx+1}\s*$", current):
             new_default = f"{new_short} {idx+1}"
             st.session_state.units[idx]["custom_label"] = new_default
@@ -378,7 +389,6 @@ def _maybe_update_labels_on_product_change(old_prod: str, new_prod: str):
 
 # ===== Unit card (Step 2) =====
 def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
-    _prime_unit_widget_keys(i)
     u = st.session_state.units[i]
     with st.container(border=True):
         st.subheader(f"Option {i+1}")
@@ -386,39 +396,31 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
         if i > 0 and st.button("Duplicate from previous", key=f"dup_{i}", disabled=disabled):
             _duplicate_from_previous(i); st.rerun()
 
-        st.markdown("**Energy Efficiency:** What energy code standard would you like to build to?")
-        raw_codes = [o for o in options("energy_code", DEFAULT_PARENT) if o in set(ENERGY_CODE_ORDER)]
-        opt_code = [c for c in ENERGY_CODE_ORDER if c in raw_codes] or ["vt_energy_code", "rbes", "passive_house"]
-        st.selectbox(" ", opt_code, format_func=pretty, key=f"code_{i}",
-                     label_visibility="collapsed", disabled=disabled,
+        st.selectbox("**Energy Efficiency:** What energy code standard would you like to build to?",
+                     [c for c in ENERGY_CODE_ORDER if c in options("energy_code", DEFAULT_PARENT)] or ["vt_energy_code","rbes","passive_house"],
+                     format_func=pretty, key=f"code_{i}", disabled=disabled,
                      on_change=lambda: _update_component(i, "code", st.session_state[f"code_{i}"]))
 
-        st.markdown("**Heating:** How would you like to heat the home?")
-        opt_src = options("energy_source", DEFAULT_PARENT) or ["natural_gas"]
-        st.selectbox(" ", opt_src, format_func=pretty, key=f"src_{i}",
-                     label_visibility="collapsed", disabled=disabled,
+        st.selectbox("**Heating:** How would you like to heat the home?",
+                     options("energy_source", DEFAULT_PARENT) or ["natural_gas"],
+                     format_func=pretty, key=f"src_{i}", disabled=disabled,
                      on_change=lambda: _update_component(i, "src", st.session_state[f"src_{i}"]))
 
-        st.markdown("**Quality:** How “nice” would you like the finish quality (kitchen, bathroom, flooring, etc.) to be?")
         opt_fin_all = options("finish_quality", DEFAULT_PARENT) or ["below_average","average","above_average"]
         order_map = {"below_average":0, "average":1, "above_average":2}
         opt_fin = sorted(set(opt_fin_all), key=lambda k: order_map.get(k, 99))
-        st.selectbox(" ", opt_fin,
-                     index=opt_fin.index("average") if "average" in opt_fin else 0,
-                     format_func=pretty, key=f"fin_{i}",
-                     label_visibility="collapsed", disabled=disabled,
+        st.selectbox("**Quality:** How “nice” would you like the finish quality (kitchen, bathroom, flooring, etc.) to be?",
+                     opt_fin, index=opt_fin.index("average") if "average" in opt_fin else 0,
+                     format_func=pretty, key=f"fin_{i}", disabled=disabled,
                      on_change=lambda: _update_component(i, "fin", st.session_state[f"fin_{i}"]))
 
-        # ---- Location toggle (no extra spacer) ----
-        current_infra_opt = st.session_state.get(f"infra_{i}", u["components"]["infra"])
-        toggle_val = st.toggle(
-            "**Location:** In a new neighborhood",
-            value=(current_infra_opt == "yes"),
-            key=f"infra_toggle_{i}",)
+        current_infra_opt = st.session_state.units[i]["components"]["infra"]
+        toggle_val = st.toggle("**Location:** In a new neighborhood",
+                               value=(current_infra_opt == "yes"),
+                               key=f"infra_toggle_{i}", disabled=disabled)
         new_infra_opt = bool_to_infra_opt(toggle_val)
         if new_infra_opt != current_infra_opt:
-            st.session_state[f"infra_{i}"] = new_infra_opt
-            _update_component(i, "infra", new_infra_opt)
+            st.session_state.units[i]["components"]["infra"] = new_infra_opt
 
         with st.expander("Advanced components", expanded=False):
             default_label = f"{pretty_short(product)} {i+1}"
@@ -433,7 +435,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
 
     label = st.session_state.units[i].get("custom_label", f"{pretty_short(product)} {i+1}")
     return {"label": label, "code": st.session_state[f"code_{i}"], "src": st.session_state[f"src_{i}"],
-            "infra": st.session_state[f"infra_{i}"], "fin": st.session_state[f"fin_{i}"]}
+            "infra": st.session_state.units[i]["components"]["infra"], "fin": st.session_state[f"fin_{i}"]}
 
 # ===== Header =====
 st.title("🏘️ Housing Affordability Visualizer")
@@ -470,14 +472,11 @@ if product != prev_prod:
 apartment_mode = (product == "apartment")
 
 if not apartment_mode:
-    br_opts = ["1","2","3","4"] if product == "townhome" else ["1","2","3"]
-    bedrooms = st.radio(
-        "**Number of bedrooms**",
-        br_opts,
-        index=br_opts.index("2") if "2" in br_opts else 0,
-        format_func=pretty,
-        horizontal=True,
-        key="global_bedrooms",)
+    st.markdown("**Number of bedrooms**")
+    br_opts = bedroom_options(product)
+    default_idx = br_opts.index("2") if "2" in br_opts else 0
+    bedrooms = st.radio(" ", br_opts, index=default_idx, format_func=pretty, horizontal=True,
+                        key="global_bedrooms", label_visibility="collapsed")
     sf = bedroom_sf(product, bedrooms) or 1000.0
 else:
     bedrooms, sf = None, None
