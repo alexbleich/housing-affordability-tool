@@ -194,36 +194,39 @@ def _sum_overlay(cat, selected_opt, parents):
     return per_sf, per_unit, fixed
 
 def compute_tdc(sf, htype, code, src, infra, fin):
-    """Total Development Cost with:
-       - baseline HARD cost per sf (mf & energy/finish %),
-       - SOFT cost multiplies the HARD portion only,
-       - overlays from energy_source & other categories,
-       - acquisition ignored,
-       - new_neighborhood per-unit toggle.
-    """
+    """Total Development Cost (per home), all values from assumptions.csv."""
     parents = [htype, "default"]
 
+    # --- HARD cost per sf (with soft-cost multiplier) ---
     base_hard_psf = baseline_hard_per_sf()
     mf_mult  = mf_factor(htype)
     pct_mult = (one_val("energy_code", code) + one_val("finish_quality", fin)) / 100.0
     hard_psf_before_soft = base_hard_psf * (mf_mult + pct_mult)
     hard_psf = hard_psf_before_soft * (1.0 + soft_cost_pct()/100.0)
 
-    es_psf, es_pu, es_fx = _sum_overlay("energy_source", src, parents)
+    # --- Policy/overlay components ---
+    es_psf, es_pu, es_fx   = _sum_overlay("energy_source", src, parents)
+    acq_psf, acq_pu, acq_fx = _sum_overlay("acq_cost", "default", parents)   # ← acquisition from CSV
+    infra_pu = infra_per_unit(htype, infra) if infra in ("yes", "no") else 0.0
 
-    EXCLUDE = {"baseline_hard_cost","soft_cost","mf_efficiency_factor",
-               "energy_code","finish_quality","energy_source","new_neighborhood","bedrooms",
-               "acq_cost"}
+    # Any other default adders (leave acq_cost INCLUDED now)
+    EXCLUDE = {
+        "baseline_hard_cost","soft_cost","mf_efficiency_factor",
+        "energy_code","finish_quality","energy_source","new_neighborhood","bedrooms"
+        # 'acq_cost' intentionally NOT excluded
+    }
     other = A[~A["category"].isin(EXCLUDE)]
     other = other[(other["option"].eq("default")) & (other["parent_option"].isin([htype, "default"]))]
 
-    other_psf  = float(pd.to_numeric(other.loc[other["value_type"].eq("per_sf"), "value"], errors="coerce").fillna(0.0).sum()) if not other.empty else 0.0
-    other_pu   = float(pd.to_numeric(other.loc[other["value_type"].eq("per_unit"), "value"], errors="coerce").fillna(0.0).sum()) if not other.empty else 0.0
-    other_fx   = float(pd.to_numeric(other.loc[other["value_type"].eq("fixed"), "value"], errors="coerce").fillna(0.0).sum()) if not other.empty else 0.0
+    other_psf = float(other.loc[other["value_type"].eq("per_sf"),  "value"].sum()) if not other.empty else 0.0
+    other_pu  = float(other.loc[other["value_type"].eq("per_unit"),"value"].sum()) if not other.empty else 0.0
+    other_fx  = float(other.loc[other["value_type"].eq("fixed"),   "value"].sum()) if not other.empty else 0.0
 
-    infra_pu = infra_per_unit(htype, infra) if infra in ("yes", "no") else 0.0
-
-    total = sf * (hard_psf + es_psf + other_psf) + es_pu + other_pu + infra_pu + es_fx + other_fx
+    # --- Total (additive; order doesn’t change the sum) ---
+    total  = 0.0
+    total += sf * (hard_psf + es_psf + acq_psf + other_psf)   # per-sf pieces (acq_psf usually 0)
+    total += es_pu + acq_pu + other_pu + infra_pu             # per-unit pieces (acq_pu carries the $18k)
+    total += es_fx + acq_fx + other_fx                        # fixed adders (if any)
     return total
 
 # ===== Price ↔ Income mapping (Chittenden engine) =====
