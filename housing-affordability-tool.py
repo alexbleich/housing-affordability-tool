@@ -194,19 +194,34 @@ def infra_per_unit(htype: str, opt: str) -> float:
 def bool_to_infra_opt(b: bool) -> str:
     return "yes" if bool(b) else "no"
 
-def _sum_values(cat, opt, parents, vtype):
-    if opt is None: 
-        return 0.0
-    r = A[(A["category"].eq(cat)) &
-          (A["option"].eq(str(opt).lower())) &
-          (A["parent_option"].isin([p.lower() for p in parents])) &
-          (A["value_type"].eq(vtype))]
-    return float(pd.to_numeric(r["value"], errors="coerce").fillna(0.0).sum()) if not r.empty else 0.0
+def overlay_totals(category: str, option: str | None, parents: list[str] | tuple[str, ...]):
+    """
+    Sum per_sf / per_unit / fixed values for a category across relevant rows:
+      - parent_option ∈ parents (e.g., [htype, "default"])
+      - option ∈ {"default", <selected option>}  (only "default" if option is None)
+    Returns: (per_sf, per_unit, fixed) as floats.
+    """
+    parent_vals = [p.lower() for p in parents]
+    if option is None or str(option).lower() == "default":
+        opts = ["default"]
+    else:
+        opts = ["default", str(option).lower()]
 
-def _sum_overlay(cat, selected_opt, parents):
-    per_sf  = _sum_values(cat, selected_opt, parents, "per_sf")  + _sum_values(cat, "default", parents, "per_sf")
-    per_unit= _sum_values(cat, selected_opt, parents, "per_unit")+ _sum_values(cat, "default", parents, "per_unit")
-    fixed   = _sum_values(cat, selected_opt, parents, "fixed")   + _sum_values(cat, "default", parents, "fixed")
+    r = A[
+        (A["category"].eq(category)) &
+        (A["parent_option"].isin(parent_vals)) &
+        (A["option"].isin(opts))
+    ]
+
+    if r.empty:
+        return 0.0, 0.0, 0.0
+
+    vals = pd.to_numeric(r["value"], errors="coerce").fillna(0.0)
+    vtype = r["value_type"].astype(str).str.lower()
+    per_sf  = float(vals[vtype.eq("per_sf")].sum())
+    per_unit= float(vals[vtype.eq("per_unit")].sum())
+    fixed   = float(vals[vtype.eq("fixed")].sum())
+
     return per_sf, per_unit, fixed
 
 def compute_tdc(sf, htype, code, src, infra, fin):
@@ -221,8 +236,8 @@ def compute_tdc(sf, htype, code, src, infra, fin):
     hard_psf = hard_psf_before_soft * (1.0 + soft_cost_pct()/100.0)
 
     # --- Policy/overlay components ---
-    es_psf, es_pu, es_fx   = _sum_overlay("energy_source", src, parents)
-    acq_psf, acq_pu, acq_fx = _sum_overlay("acq_cost", "baseline", parents)
+    es_psf, es_pu, es_fx   = overlay_totals("energy_source", src, parents)
+    acq_psf, acq_pu, acq_fx = overlay_totals("acq_cost", "baseline", parents)
     infra_pu = infra_per_unit(htype, infra) if infra in ("yes", "no") else 0.0
 
     EXCLUDE = {
