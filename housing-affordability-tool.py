@@ -543,16 +543,14 @@ with st.container(border=True):
     st.subheader("**Before choosing *household income*, you should know...**")
     st.markdown(f"- *{money_md(85000)} = Statewide Median Household Income*")
 
-    st.markdown(
-        "**Average pay for priority professions in Vermont:**\n"
-        + "\n".join([
-            f"    - ~{money_md(42000)} = Early-childhood educator",
-            f"    - ~{money_md(55000)} = School-age teacher",
-            f"    - ~{money_md(70000)} = Firefighter/police officer",
-            f"    - ~{money_md(75000)} = Plumber/electrician",
-            f"    - ~{money_md(90000)} = RN @ UVM Medical",
-        ])
-    )
+st.markdown("**Average pay for priority professions in Vermont:**")
+st.markdown("\n".join([
+    "  - ~$42,000 = Early-childhood educator",
+    "  - ~$55,000 = School-age teacher",
+    "  - ~$70,000 = Firefighter/police officer",
+    "  - ~$75,000 = Plumber/electrician",
+    "  - ~$90,000 = RN @ UVM Medical",
+]))
 
 household_size = st.radio(
     "**Select household size**",
