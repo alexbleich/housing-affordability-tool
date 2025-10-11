@@ -679,21 +679,24 @@ if show_results:
 
                 st.write("")
 
-            # ---------- Compare controls + prompt to scroll ----------
-            st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
-            prev_units = st.session_state.num_units
-            compare_choice = st.radio(
-                "**How many homes do you want to build?**",
-                [1, 2, 3],
-                index={1:0, 2:1, 3:2}[prev_units],
-                horizontal=True,
-                format_func=lambda n: {1:"1 home (default)", 2:"2 homes", 3:"3 homes"}[n],
-            )
-
-            if compare_choice != prev_units:
-                st.session_state.num_units = compare_choice
-                if compare_choice > 1:
-                    st.write("⬆️ Scroll back to Step 2 to build your additional home(s), then use the the graph to compare.")
+        # ---------- Compare controls + prompt to scroll ----------
+        st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
+        
+        prev_units = st.session_state.num_units
+        compare_choice = st.radio(
+            "**How many homes do you want to build?**",
+            [1, 2, 3],
+            index={1: 0, 2: 1, 3: 2}[prev_units],
+            horizontal=True,
+            format_func=lambda n: {1: "1 home (default)", 2: "2 homes", 3: "3 homes"}[n],
+        )
+        
+        if compare_choice != prev_units:
+            st.session_state.num_units = compare_choice
+            _ensure_and_get_units()
+            if compare_choice > 1:
+                st.info("⬆️ Scroll back to Step 2 to build your additional home(s).")
+            st.rerun()
 
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
