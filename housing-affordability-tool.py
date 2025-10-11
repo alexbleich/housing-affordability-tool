@@ -534,7 +534,8 @@ with st.container(border=True):
 
     st.markdown("\n".join([
         "- 2.4 = Average VT household size",
-        "- 70% = Proportion of Vermonters living in 1- or 2-person households",
+        "- 70% of Vermonters live in 1- or 2-person households [VHFA]"
+        "(https://vhfa.org/sites/default/files/documents/publications/VT-HNA-2025-Factsheet-7-HHsize.pdf)",
     ]))
 
     st.subheader("**Before choosing *household income*, you should know...**")
