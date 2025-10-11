@@ -695,7 +695,7 @@ if show_results:
             st.session_state.num_units = compare_choice
             _ensure_and_get_units()
             if compare_choice > 1:
-                st.write("⬆️ Scroll back to Step 2 to build your additional home(s).")
+                st.info("⬆️ Scroll back to Step 2 to build your additional home(s).")
             st.rerun()
 
     else:
