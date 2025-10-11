@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from dataclasses import dataclass
 import re
 import matplotlib.pyplot as plt
@@ -151,6 +152,31 @@ def money_md(x: float | int | str) -> str:
         return "—"
     return f"\\${int(round(v)):,}"
 
+def money_html(v: float | int | str) -> str:
+    """Return a $-formatted integer for HTML contexts."""
+    try:
+        n = int(round(float(v)))
+    except Exception:
+        return "—"
+    return f"${n:,}"
+
+def ami_line_for(region_label: str, hh_size: int, required_income: float) -> str:
+    """Returns an HTML-ready sentence for the AMI bullet, with indent rules."""
+    reg_key = PRETTY2REG[region_label]
+    pct, capped = ami_percent_for_income(reg_key, int(hh_size), float(required_income))
+    capped_low  = (pct == 30 and capped)
+    capped_high = (pct == 150 and capped)
+
+    if pct is None:
+        return f"—% of AMI in {region_label}."
+    if capped_high:
+        return ("More than 150% of AMI in the rest of Vermont."
+                if region_label == "Rest of Vermont"
+                else f"More than 150% of Area Median Income in {region_label}.")
+    suffix = " (at least)" if capped_low else ""
+    return (f"{pct}% of AMI in the rest of Vermont{suffix}."
+            if region_label == "Rest of Vermont"
+            else f"{pct}% of Area Median Income in {region_label}{suffix}.")
 
 def _rows(cat, opt=None, parent=None):
     q = A["category"].eq(cat)
@@ -467,6 +493,9 @@ st.markdown(
 )
 st.divider()
 
+if st.session_state.pop("jump_to_step1", False):
+    components.html("<script>window.scrollTo(0,0);</script>", height=0)
+
 # ===== Step 1 – Choose the Housing Type =====
 st.header("Step 1 – Choose the Housing Type")
 
@@ -539,7 +568,7 @@ with st.container(border=True):
 
     st.subheader("**Before choosing *household income*, you should know...**")
     st.markdown(
-        f"- *{money_md(85260)}* = Statewide Median Household Income, [2024]"
+        f"- {money_md(85260)} = Statewide Median Household Income, [2024]"
         "(https://fred.stlouisfed.org/series/MEHOINUSVTA672N)"
     )
     st.markdown(
@@ -679,10 +708,12 @@ if show_results:
                 index={1:0, 2:1, 3:2}[st.session_state.num_units],
                 horizontal=True,
                 format_func=lambda n: {1:"1 home (current setting)", 2:"2 homes", 3:"3 homes"}[n],
+                key="compare_choice",
             )
             if compare_choice != st.session_state.num_units:
                 st.session_state.num_units = compare_choice
                 _ensure_and_get_units()
+                st.session_state["jump_to_step1"] = True
                 st.rerun()
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
