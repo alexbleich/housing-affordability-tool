@@ -201,7 +201,6 @@ def _sum_values(cat, opt, parents, vtype):
           (A["option"].eq(str(opt).lower())) &
           (A["parent_option"].isin([p.lower() for p in parents])) &
           (A["value_type"].eq(vtype))]
-    # robust to NaN in new file
     return float(pd.to_numeric(r["value"], errors="coerce").fillna(0.0).sum()) if not r.empty else 0.0
 
 def _sum_overlay(cat, selected_opt, parents):
@@ -306,7 +305,7 @@ def ami_percent_for_income(region_key: str, hh_size: int, required_income: float
     col = f"income{hh_size}"
     if col not in df.columns: return None, False
     ser_inc = pd.to_numeric(df[col], errors="coerce")
-    ser_ami = pd.to_numeric(df[AMI_COL], errors="coerce")  # fractions, 0.30..1.50
+    ser_ami = pd.to_numeric(df[AMI_COL], errors="coerce")
     mask = ser_inc.notna() & ser_ami.notna()
     sub = pd.DataFrame({"ami": ser_ami[mask], "inc": ser_inc[mask]}).sort_values("ami")
     if sub.empty: return None, False
@@ -323,7 +322,7 @@ def ami_percent_for_income(region_key: str, hh_size: int, required_income: float
 
 # ===== Chart Utils =====
 def _bar_with_values(ax, labels, values, pad_ratio):
-    bars = ax.bar(labels, values, color="#A7D3FF", edgecolor="black")  # lighter blue
+    bars = ax.bar(labels, values, color="#A7D3FF", edgecolor="black")
     for b in bars:
         y = b.get_height()
         ax.text(b.get_x()+b.get_width()/2, y * (1 + pad_ratio), fmt_money(y), ha="center", va="bottom", fontsize=10)
@@ -460,7 +459,6 @@ st.title("🏘️ Housing Affordability Visualizer")
 st.write("This tool allows you to see how housing policy directly impacts whether Vermonters at various income levels are able to afford housing.")
 st.write("“Build” one type of housing or compare multiple. Can you afford new construction in Vermont?")
 
-# Top link bar (tiny HTML only to keep symmetric spaces around the bar)
 st.markdown(
     '[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)'
     ' &nbsp;|&nbsp; '
@@ -480,7 +478,6 @@ product = st.radio(
     format_func=pretty,
     horizontal=False,
     key="global_product",)
-
 st.write("")
 
 if product != prev_prod:
@@ -541,8 +538,10 @@ with st.container(border=True):
     ]))
 
     st.subheader("**Before choosing *household income*, you should know...**")
-    st.markdown(f"- *{money_md(85000)}* = Statewide Median Household Income")
-
+    st.markdown(
+        f"- *{money_md(85260)}* = Statewide Median Household Income, [2024]"
+        "(https://fred.stlouisfed.org/series/MEHOINUSVTA672N)"
+    )
     st.markdown(
         "**Average pay for priority professions in Vermont:**\n"
         + "\n".join([
@@ -598,13 +597,12 @@ def _ami_phrase(pct: int | None, region_label: str, capped_low: bool, capped_hig
     """Readable AMI line with special phrasing at caps."""
     if pct is None:
         return f"—% of AMI in {region_label}"
-    if capped_high:  # >150%
+    if capped_high:
         return (
             f"More than 150% of AMI in the rest of Vermont."
             if region_label == "Rest of Vermont"
             else f"More than 150% of Area Median Income in {region_label}."
         )
-    # <30% gets "(at least)"
     suffix = " (at least)" if capped_low else ""
     return (
         f"{pct}% of AMI in the rest of Vermont{suffix}."
@@ -614,14 +612,12 @@ def _ami_phrase(pct: int | None, region_label: str, capped_low: bool, capped_hig
 
 if show_results:
     if not apartment_mode:
-        # Build labels and TDCs for current units
         labels, tdc_vals = [], []
         for idx, u in enumerate(units):
             label = u["label"] or f"{pretty_short(product)} {idx+1}"
             labels.append(label)
             tdc_vals.append(compute_tdc(sf, product, u["code"], u["src"], u["infra"], u["fin"]))
 
-        # Chittenden mapping (fixed engine)
         p2i, i2p, *_ = build_price_income_transformers("Chittenden", int(household_size), int(bedrooms))
         if p2i is None or i2p is None:
             st.warning("Not enough data to build the price↔income mapping for this selection.")
@@ -629,7 +625,6 @@ if show_results:
             afford_price = float(i2p(np.array([user_income]))[0])
             draw_chart(labels, tdc_vals, afford_price, p2i, i2p)
 
-            # Success / Failure messages (with labels for multi-home)
             prices = np.asarray(tdc_vals, dtype=float)
             req_incomes = p2i(prices)
             mask = affordable_mask(user_income, req_incomes)
@@ -654,10 +649,8 @@ if show_results:
                         "are less than the income required to buy them."
                     )
 
-            # Space between callout and info boxes
             st.write("")
 
-            # "More About ..." boxes per option
             for idx, label in enumerate(labels):
                 req_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
@@ -665,12 +658,10 @@ if show_results:
                 with st.container(border=True):
                     st.subheader(title)
 
-                    # Top bullets
                     st.markdown(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
                     st.markdown("- This is only affordable for **0 of the 270,000 households in Vermont**.")
                     st.markdown("- To afford this home, you would need to make:")
 
-                    # Sub-bullets for the 3 regions (handles caps and phrasing)
                     for rp in ["Chittenden", "Addison", "Rest of Vermont"]:
                         reg_key_line = PRETTY2REG[rp]
                         pct, capped = ami_percent_for_income(reg_key_line, int(household_size), req_inc)
