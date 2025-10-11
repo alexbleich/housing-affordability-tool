@@ -593,7 +593,7 @@ if show_results:
 
             st.subheader(
                 "Want to try again? Build another home (or two!) and use the graph to compare to your first attempt. "
-            "To tweak your first home and/or build new ones, *return to Step 2*."
+            "To tweak your first home and/or build your new one(s), *return to Step 2*."
             )
             st.write("")
             if "num_units" not in st.session_state:
