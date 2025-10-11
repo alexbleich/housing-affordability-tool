@@ -51,9 +51,9 @@ DEFAULT_COMPONENTS = dict(code="vt_energy_code", src="natural_gas", infra="no", 
 def load_assumptions(p: Path) -> pd.DataFrame:
     """
     Load assumptions.csv (columns: category,parent_option,option,value_type,value).
-    - All string ids are normalized to lowercase & stripped.
+    - All string ids normalized to lowercase & stripped.
     - value_type normalized to {per_sf, per_unit, fixed}.
-    - 'value' is numeric; blanks are kept as NaN so UI can hide items without costs yet.
+    - 'value' kept numeric; blanks remain NaN so UI can hide items with no costs yet.
     """
     if not p.exists():
         st.error(f"Missing assumptions file: {p}"); st.stop()
@@ -67,7 +67,7 @@ def load_assumptions(p: Path) -> pd.DataFrame:
         st.error(f"Assumptions CSV missing columns: {missing}"); st.stop()
 
     for c in ("category", "parent_option", "option", "value_type"):
-        df[c] = df[c].astype(str).strip().str.lower()
+        df[c] = df[c].astype(str).str.strip().str.lower()
 
     def _norm_vtype(s: str) -> str:
         t = s.replace("_", "").replace("-", "").replace(" ", "")
