@@ -679,24 +679,28 @@ if show_results:
 
                 st.write("")
 
-        # ---------- Compare controls + prompt to scroll ----------
+        # ---------- Compare controls (no HTML, no manual rerun) ----------
         st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
         
         prev_units = st.session_state.num_units
         compare_choice = st.radio(
             "**How many homes do you want to build?**",
             [1, 2, 3],
-            index={1: 0, 2: 1, 3: 2}[prev_units],
+            index={1:0, 2:1, 3:2}[prev_units],
             horizontal=True,
-            format_func=lambda n: {1: "1 home (default)", 2: "2 homes", 3: "3 homes"}[n],
+            format_func=lambda n: {1: "1 home (current setting)", 2: "2 homes", 3: "3 homes"}[n],
+            key="compare_choice",
         )
         
+        # Updating a widget-backed session value will trigger an implicit rerun automatically
         if compare_choice != prev_units:
             st.session_state.num_units = compare_choice
-            _ensure_and_get_units()
-            if compare_choice > 1:
-                st.info("⬆️ Scroll back to Step 2 to build your additional home(s).")
-            st.rerun()
+            _ensure_and_get_units()  # make sure extra unit cards exist
+            # IMPORTANT: no st.rerun() here — avoids jump
+        
+        # White hint lives *under* the radio and persists naturally while >1 option is selected
+        if st.session_state.num_units > 1:
+            st.write("⬆️ Scroll back to **Step 2** to build your additional home(s), then view the graph to compare.")
 
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
