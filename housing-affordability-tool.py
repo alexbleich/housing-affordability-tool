@@ -592,10 +592,9 @@ st.write("")
 st.subheader("Let’s see how you did!")
 show_results = st.toggle("View the home you built", value=False, key="view_home_toggle")
 
-# ===== Results (Graph + Messaging) — DROP-IN REPLACEMENT =====
+# ===== Results (Graph + Messaging) =====
 if show_results:
     if not apartment_mode:
-        # Build labels and TDCs for current units
         labels, tdc_vals = [], []
         for idx, u in enumerate(units):
             label = u["label"] or f"{pretty_short(product)} {idx+1}"
@@ -610,7 +609,6 @@ if show_results:
             afford_price = float(i2p(np.array([user_income]))[0])
             draw_chart(labels, tdc_vals, afford_price, p2i, i2p)
 
-            # Success / Failure messages (with labels for multi-home)
             prices = np.asarray(tdc_vals, dtype=float)
             req_incomes = p2i(prices)
             mask = affordable_mask(user_income, req_incomes)
@@ -635,42 +633,48 @@ if show_results:
                         "are less than the income required to buy them."
                     )
 
-            # Small spacer between callout and info boxes
             st.write("")
 
             # ---------- “More about this home” ----------
-            def _ami_line_for_region(region_pretty_label: str, need_income: float) -> str:
-                """Plain-language line for one region, matching your screenshot style."""
-                reg_key = PRETTY2REG[region_pretty_label]
-                pct, capped = ami_percent_for_income(reg_key, int(household_size), float(need_income))
+            def _ami_line_for_region(pct: int | None, region_label: str, capped_low: bool, capped_high: bool) -> str:
+                """Readable AMI sentence for a single region."""
                 if pct is None:
-                    return f"—% of AMI in {region_pretty_label}"
-                # >150% -> 'More than 150% ...'; <30% -> '... (at least)'
-                if capped and pct == 150:
+                    return f"—% of AMI in {region_label}."
+                if capped_high:  # >= 150%
                     return ("More than 150% of AMI in the rest of Vermont."
-                            if region_pretty_label == "Rest of Vermont"
-                            else f"More than 150% of Area Median Income in {region_pretty_label}.")
-                suffix = " (at least)" if (capped and pct == 30) else ""
+                            if region_label == "Rest of Vermont"
+                            else f"More than 150% of Area Median Income in {region_label}.")
+                # <= 30% gets '(at least)'
+                suffix = " (at least)" if capped_low else ""
                 return (f"{pct}% of AMI in the rest of Vermont{suffix}."
-                        if region_pretty_label == "Rest of Vermont"
-                        else f"{pct}% of Area Median Income in {region_pretty_label}{suffix}.")
-
+                        if region_label == "Rest of Vermont"
+                        else f"{pct}% of Area Median Income in {region_label}{suffix}.")
+            
+            # --- inside your for-loop over labels (replace your current 'More About...' block) ---
             for idx, label in enumerate(labels):
-                need_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
-
-                # Title based on count
+                req_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
+            
                 with st.container(border=True):
                     st.subheader(title)
-
-                    # Top bullets (match screenshot)
-                    st.markdown(f"- You would need to have a household income of **{fmt_money(need_inc)}** to afford this home.")
-                    st.markdown("- This is only affordable for **0 of the 270,000 households in Vermont**.")
-                    st.markdown("- To afford this home, you would need to make:")
-                    # Three indented sub-bullets, one per region
-                    st.markdown("  - " + _ami_line_for_region("Chittenden", need_inc))
-                    st.markdown("  - " + _ami_line_for_region("Addison", need_inc))
-                    st.markdown("  - " + _ami_line_for_region("Rest of Vermont", need_inc))
+            
+                    # Build the nested bullet list in ONE markdown block
+                    bullets = []
+                    bullets.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
+                    bullets.append("- This is only affordable for **0 of the 270,000 households in Vermont**.")
+                    bullets.append("- To afford this home, you would need to make:")
+            
+                    # Three indented sub-bullets
+                    sub_lines = []
+                    for rp in ["Chittenden", "Addison", "Rest of Vermont"]:
+                        reg_key_line = PRETTY2REG[rp]
+                        pct, capped = ami_percent_for_income(reg_key_line, int(household_size), req_inc)
+                        capped_low  = (pct == 30  and capped)
+                        capped_high = (pct == 150 and capped)
+                        sub_lines.append(f"    - {_ami_line_for_region(pct, rp, capped_low, capped_high)}")
+            
+                    # Join main bullets + sub-bullets and render once
+                    st.markdown("\n".join(bullets + sub_lines))
 
                 st.write("")
 
@@ -688,9 +692,7 @@ if show_results:
             if compare_choice != prev_units:
                 st.session_state.num_units = compare_choice
                 if compare_choice > 1:
-                    # Gentle prompt so the user knows what to do next
-                    st.write("⬆️ Scroll back to the top to build your additional home(s), then return here to compare.")
-                # No st.rerun(), so they can see the message first.
+                    st.write("⬆️ Scroll back to the top to build your additional home(s), then return to the graph to compare.")
 
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
