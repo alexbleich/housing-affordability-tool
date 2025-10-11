@@ -459,8 +459,9 @@ product = st.radio(
     ["townhome","condo","apartment"],
     format_func=pretty,
     horizontal=False,
-    key="global_product",
-)
+    key="global_product",)
+
+st.write("")
 
 if product != prev_prod:
     _maybe_update_labels_on_product_change(prev_prod, product)
@@ -533,7 +534,7 @@ st.number_input(
 user_income = float(st.session_state["user_income"])
 
 # Note 1 (grey) + spacer
-st.caption(
+st.write(
     f"Minimum/maximum income allowed for this household size: "
     f"{fmt_money(min_income)} – {fmt_money(max_income)}")
 st.write("Note - *Statewide Median Household Income: $85,000*")
