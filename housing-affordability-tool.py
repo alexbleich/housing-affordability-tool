@@ -3,10 +3,27 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from dataclasses import dataclass
 import re
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MaxNLocator
+
+components.html(
+    """
+    <script>
+    window.addEventListener('DOMContentLoaded', function () {
+      const KEY = 'st_scroll_y';
+      const y = sessionStorage.getItem(KEY);
+      if (y !== null) { window.scrollTo(0, parseFloat(y)); }
+      window.addEventListener('scroll', () => {
+        sessionStorage.setItem(KEY, window.scrollY);
+      }, { passive: true });
+    });
+    </script>
+    """,
+    height=0
+)
 
 # ----- Robust project paths -----
 @dataclass(frozen=True)
