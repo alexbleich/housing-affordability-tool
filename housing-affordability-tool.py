@@ -568,7 +568,7 @@ if show_results:
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
                 x_hhs, pct_float = households_share_at_or_above(req_inc, denom_total_hhs=270_000)
                 pct_display = f"{pct_float:.0f}"
-                    st.subheader(title)
+                st.subheader(title)
                 
                     lines = []
                     lines.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
