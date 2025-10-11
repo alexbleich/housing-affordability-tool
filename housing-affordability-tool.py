@@ -533,11 +533,10 @@ else:
     inc_min_box, inc_max_box = 20000, 300000
 
 with st.container(border=True):
-    st.subheader("Context for this step")
-    st.write("**Before choosing household size, you should know...**")
+    st.subheader("**Before choosing household size, you should know...**")
     st.markdown("- 2.4 = Average VT household size")
     st.markdown("- 70% = Proportion of VTers living in 1- or 2-person households")
-    st.write("**Before choosing household income, you should know...**")
+    st.subheader("**Before choosing household income, you should know...**")
     st.markdown(f"- {money_md(85000)} = Statewide Median Household Income")
     st.markdown(
         f"- {money_md(inc_min_box)} to {money_md(inc_max_box)} = "
