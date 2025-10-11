@@ -556,9 +556,8 @@ with st.container(border=True):
 household_size = st.radio(
     "**Select household size**",
     list(range(1, 9)),
-    index=3, horizontal=True, key="household_size",)
+    index=0, horizontal=True, key="household_size",)
 
-# Bounds from Chittenden mapping for selected bedrooms
 if not apartment_mode and bedrooms is not None:
     p2i_b, i2p_b, inc_min_b, inc_max_b, *_ = build_price_income_transformers("Chittenden", int(household_size), int(bedrooms))
     if all(v is not None and np.isfinite(v) for v in (inc_min_b, inc_max_b)):
@@ -640,17 +639,15 @@ if show_results:
                 """Readable AMI sentence for a single region."""
                 if pct is None:
                     return f"—% of AMI in {region_label}."
-                if capped_high:  # >= 150%
+                if capped_high:
                     return ("More than 150% of AMI in the rest of Vermont."
                             if region_label == "Rest of Vermont"
                             else f"More than 150% of Area Median Income in {region_label}.")
-                # <= 30% gets '(at least)'
                 suffix = " (at least)" if capped_low else ""
                 return (f"{pct}% of AMI in the rest of Vermont{suffix}."
                         if region_label == "Rest of Vermont"
                         else f"{pct}% of Area Median Income in {region_label}{suffix}.")
-            
-            # --- inside your for-loop over labels (replace your current 'More About...' block) ---
+
             for idx, label in enumerate(labels):
                 req_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
@@ -658,13 +655,11 @@ if show_results:
                 with st.container(border=True):
                     st.subheader(title)
             
-                    # Build the nested bullet list in ONE markdown block
                     bullets = []
                     bullets.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
                     bullets.append("- This is only affordable for **0 of the 270,000 households in Vermont**.")
                     bullets.append("- To afford this home, you would need to make:")
             
-                    # Three indented sub-bullets
                     sub_lines = []
                     for rp in ["Chittenden", "Addison", "Rest of Vermont"]:
                         reg_key_line = PRETTY2REG[rp]
@@ -673,7 +668,6 @@ if show_results:
                         capped_high = (pct == 150 and capped)
                         sub_lines.append(f"    - {_ami_line_for_region(pct, rp, capped_low, capped_high)}")
             
-                    # Join main bullets + sub-bullets and render once
                     st.markdown("\n".join(bullets + sub_lines))
 
                 st.write("")
@@ -686,13 +680,13 @@ if show_results:
                 [1, 2, 3],
                 index={1:0, 2:1, 3:2}[prev_units],
                 horizontal=True,
-                format_func=lambda n: {1:"1 home (current setting)", 2:"2 homes", 3:"3 homes"}[n],
+                format_func=lambda n: {1:"1 home (default)", 2:"2 homes", 3:"3 homes"}[n],
             )
 
             if compare_choice != prev_units:
                 st.session_state.num_units = compare_choice
                 if compare_choice > 1:
-                    st.write("⬆️ Scroll back to the top to build your additional home(s), then return to the graph to compare.")
+                    st.write("⬆️ Scroll back to Step 2 to build your additional home(s), then use the the graph to compare.")
 
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
