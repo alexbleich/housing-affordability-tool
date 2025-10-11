@@ -197,7 +197,7 @@ def compute_tdc(sf, htype, code, src, infra, fin):
     """Total Development Cost (per home), all values from assumptions.csv."""
     parents = [htype, "default"]
 
-    # --- HARD cost per sf (with soft-cost multiplier) ---
+    # --- HARD cost per sf w/ soft-cost multiplier ---
     base_hard_psf = baseline_hard_per_sf()
     mf_mult  = mf_factor(htype)
     pct_mult = (one_val("energy_code", code) + one_val("finish_quality", fin)) / 100.0
@@ -206,14 +206,12 @@ def compute_tdc(sf, htype, code, src, infra, fin):
 
     # --- Policy/overlay components ---
     es_psf, es_pu, es_fx   = _sum_overlay("energy_source", src, parents)
-    acq_psf, acq_pu, acq_fx = _sum_overlay("acq_cost", "default", parents)   # ← acquisition from CSV
+    acq_psf, acq_pu, acq_fx = _sum_overlay("acq_cost", "baseline", parents)
     infra_pu = infra_per_unit(htype, infra) if infra in ("yes", "no") else 0.0
 
-    # Any other default adders (leave acq_cost INCLUDED now)
     EXCLUDE = {
         "baseline_hard_cost","soft_cost","mf_efficiency_factor",
         "energy_code","finish_quality","energy_source","new_neighborhood","bedrooms"
-        # 'acq_cost' intentionally NOT excluded
     }
     other = A[~A["category"].isin(EXCLUDE)]
     other = other[(other["option"].eq("default")) & (other["parent_option"].isin([htype, "default"]))]
