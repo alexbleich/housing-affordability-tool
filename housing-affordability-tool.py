@@ -354,21 +354,22 @@ def draw_chart(labels, tdc_vals, afford_price, price_to_income, income_to_price)
     fig.tight_layout()
     st.pyplot(fig)
 
-def _ami_phrase(pct: int | None, region_label: str, capped_low: bool, capped_high: bool) -> str:
+def _ami_line_for_region(pct: int | None, region_label: str, capped_low: bool, capped_high: bool) -> str:
+    """Readable AMI sentence for one region; appends 'County' for Chittenden/Addison."""
     is_county = region_label in ("Chittenden", "Addison")
     if pct is None:
-        return f"—% of AMI in {region_label} County" if is_county else "—% of AMI in the rest of Vermont"
+        return f"—% of AMI in {region_label}{' County' if is_county else ''}."
     if capped_high:
         return (
-            f"More than 150% of Area Median Income in {region_label} County."
-            if is_county
-            else "More than 150% of AMI in the rest of Vermont."
+            "More than 150% of AMI in the rest of Vermont."
+            if region_label == "Rest of Vermont"
+            else f"More than 150% of Area Median Income in {region_label}{' County' if is_county else ''}."
         )
     suffix = " (at least)" if capped_low else ""
     return (
-        f"{pct}% of Area Median Income in {region_label} County{suffix}."
-        if is_county
-        else f"{pct}% of AMI in the rest of Vermont{suffix}."
+        f"{pct}% of AMI in the rest of Vermont{suffix}."
+        if region_label == "Rest of Vermont"
+        else f"{pct}% of Area Median Income in {region_label}{' County' if is_county else ''}{suffix}."
     )
 
 # ===== Session State (units) =====
@@ -639,19 +640,6 @@ if show_results:
             st.write("")
 
             # ---------- “More about this home” ----------
-            def _ami_line_for_region(pct: int | None, region_label: str, capped_low: bool, capped_high: bool) -> str:
-                """Readable AMI sentence for a single region."""
-                if pct is None:
-                    return f"—% of AMI in {region_label}."
-                if capped_high:
-                    return ("More than 150% of AMI in the rest of Vermont."
-                            if region_label == "Rest of Vermont"
-                            else f"More than 150% of Area Median Income in {region_label}.")
-                suffix = " (at least)" if capped_low else ""
-                return (f"{pct}% of AMI in the rest of Vermont{suffix}."
-                        if region_label == "Rest of Vermont"
-                        else f"{pct}% of Area Median Income in {region_label}{suffix}.")
-
             for idx, label in enumerate(labels):
                 req_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
