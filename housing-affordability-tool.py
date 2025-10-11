@@ -595,7 +595,7 @@ if show_results:
             st.write("Build another home (or two!) and use the graph to compare to your first attempt. "
                 "To tweak your first home and/or build your new one(s), *return to Step 2*."
             )
-            st.write("")
+
             if "num_units" not in st.session_state:
                 st.session_state.num_units = 1
             prev_units = int(st.session_state.num_units)
