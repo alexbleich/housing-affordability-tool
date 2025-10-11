@@ -528,19 +528,19 @@ if show_results:
 
             if len(labels) == 1:
                 if len(affordable_labels) == 1:
-                    st.success("Congrats! The total development cost of this home is less than the income required to buy it.")
+                    st.success("**Well done!** The total development cost of this home is less than the income required to buy it.")
                 else:
-                    st.error("Not quite! This home is unaffordable for the household income you entered.")
+                    st.error("**Not quite!** This home is unaffordable for the household income you entered.")
             else:
                 k = len(affordable_labels)
                 if k == 0:
-                    st.error("Not quite! These homes are unaffordable for the household income you entered.")
+                    st.error("**Not quite!** These homes are unaffordable for the household income you entered.")
                 elif k == len(labels):
-                    st.success("Congrats! The total development cost for all options are less than the income required to buy them.")
+                    st.success("**Well done!** The total development cost for all options are less than the income required to buy them.")
                 elif k == 1:
-                    st.success(f"Congrats! The total development cost for **{affordable_labels[0]}** is less than the income required to buy it.")
+                    st.success(f"**Well done!** The total development cost for **{affordable_labels[0]}** is less than the income required to buy it.")
                 else:
-                    st.success(f"Congrats! The total development cost for **{affordable_labels[0]}** & **{affordable_labels[1]}** are less than the income required to buy them.")
+                    st.success(f"**Well done!** The total development cost for **{affordable_labels[0]}** & **{affordable_labels[1]}** are less than the income required to buy them.")
 
             st.write("")
 
