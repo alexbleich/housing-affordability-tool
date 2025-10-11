@@ -12,17 +12,20 @@ from matplotlib.ticker import FuncFormatter, MaxNLocator
 components.html(
     """
     <script>
-    window.addEventListener('DOMContentLoaded', function () {
-      const KEY = 'st_scroll_y';
-      const y = sessionStorage.getItem(KEY);
-      if (y !== null) { window.scrollTo(0, parseFloat(y)); }
-      window.addEventListener('scroll', () => {
-        sessionStorage.setItem(KEY, window.scrollY);
-      }, { passive: true });
-    });
+    (function() {
+      const KEY = "scroll_to_anchor_flag";
+      const ANCHOR = "compare_controls_anchor";
+      const flag = sessionStorage.getItem(KEY);
+      if (flag === "1") {
+        // Scroll to anchor then clear flag
+        const el = document.getElementById(ANCHOR);
+        if (el) { el.scrollIntoView({behavior: "instant", block: "start"}); }
+        sessionStorage.removeItem(KEY);
+      }
+    })();
     </script>
     """,
-    height=0
+    height=0,
 )
 
 # ----- Robust project paths -----
@@ -714,6 +717,35 @@ if show_results:
         )
         
         _ensure_and_get_units()
+
+            # ---------- Compare controls (stable position; no jump to top) ----------
+        st.markdown("<div id='compare_controls_anchor'></div>", unsafe_allow_html=True)
+        
+        st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
+        st.write("**⬆️ Return to Step 2 to tweak your first home / add others, then view the graph to compare.**")
+        
+        if "num_units" not in st.session_state:
+            st.session_state.num_units = 1
+        
+        prev_units = int(st.session_state.num_units)
+        
+        compare_choice = st.radio(
+            "**How many homes do you want to build?**",
+            [1, 2, 3],
+            index={1:0, 2:1, 3:2}[prev_units],
+            horizontal=True,
+            format_func=lambda n: "1 home (current setting)" if n == 1 else f"{n} homes",
+            key="num_units",
+        )
+        
+        if int(compare_choice) != prev_units:
+            _ensure_and_get_units()
+            st.session_state["_scroll_to_compare_anchor"] = True
+            components.html("<script>sessionStorage.setItem('scroll_to_anchor_flag','1');</script>", height=0)
+            st.rerun()
+        
+        if st.session_state.num_units > 1:
+            st.write("⬆️ Scroll back to **Step 2** to build your additional home(s).")
 
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
