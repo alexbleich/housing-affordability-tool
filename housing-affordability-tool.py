@@ -96,7 +96,7 @@ def households_share_at_or_above(
     mask = df["hh_income"] > thr
     count = int(df.loc[mask, "num_hhs"].sum())
     pct = (count / float(denom_total_hhs)) * 100.0 if denom_total_hhs else 0.0
-    pct_str = f"{pct:.1f}".rstrip("0").rstrip(".")
+    pct_str = f"{pct:.0f}".rstrip("0").rstrip(".")
     return count, pct_str
 
 A = load_assumptions(ASSUMP)
