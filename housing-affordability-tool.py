@@ -1,34 +1,14 @@
-# ===== Imports & Paths (pre-helpers) =====
+# ===== Imports & Paths
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from dataclasses import dataclass
 import re
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
-components.html(
-    """
-    <script>
-    (function() {
-      const KEY = "scroll_to_anchor_flag";
-      const ANCHOR = "compare_controls_anchor";
-      const flag = sessionStorage.getItem(KEY);
-      if (flag === "1") {
-        // Scroll to anchor then clear flag
-        const el = document.getElementById(ANCHOR);
-        if (el) { el.scrollIntoView({behavior: "instant", block: "start"}); }
-        sessionStorage.removeItem(KEY);
-      }
-    })();
-    </script>
-    """,
-    height=0,
-)
-
-# ----- Robust project paths -----
+# ===== Paths, files, constants
 @dataclass(frozen=True)
 class Paths:
     root: Path
@@ -36,29 +16,18 @@ class Paths:
     assumptions: Path
 
 ROOT = Path(__file__).parent if "__file__" in globals() else Path.cwd()
-PATHS = Paths(
-    root=ROOT,
-    data=ROOT / "data",
-    assumptions=ROOT / "data" / "assumptions.csv",
-)
-
+PATHS = Paths(root=ROOT, data=ROOT / "data", assumptions=ROOT / "data" / "assumptions.csv")
 DATA = PATHS.data
 ASSUMP = PATHS.assumptions
 
-# ----- Region CSVs -----
 REGIONS = {
     "Chittenden": DATA / "chittenden_ami.csv",
     "Addison":    DATA / "addison_ami.csv",
-    "Vermont":    DATA / "vermont_ami.csv",  # Rest of Vermont
+    "Vermont":    DATA / "vermont_ami.csv",
 }
-REGION_PRETTY = {
-    "Chittenden": "Chittenden",
-    "Addison": "Addison",
-    "Vermont": "Rest of Vermont",
-}
+REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "Rest of Vermont"}
 PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 
-# ----- Constants used downstream -----
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
 AFFORD_EPS = 0.5
@@ -66,46 +35,32 @@ AFFORD_EPS = 0.5
 ENERGY_CODE_ORDER = ["vt_energy_code", "rbes", "passive_house"]
 DEFAULT_COMPONENTS = dict(code="vt_energy_code", src="natural_gas", infra="no", fin="average")
 
-# ===== Data Loading =====
+# ===== Data Loading
 @st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: str(p)})
 def load_assumptions(p: Path) -> pd.DataFrame:
-    """
-    Load assumptions.csv (columns: category,parent_option,option,value_type,value).
-    - All string ids normalized to lowercase & stripped.
-    - value_type normalized to {per_sf, per_unit, fixed}.
-    - 'value' kept numeric; blanks remain NaN so UI can hide items with no costs yet.
-    """
     if not p.exists():
         st.error(f"Missing assumptions file: {p}"); st.stop()
-
     df = pd.read_csv(p)
     df.columns = df.columns.str.strip().str.lower()
-
-    required = {"category", "parent_option", "option", "value_type", "value"}
+    required = {"category","parent_option","option","value_type","value"}
     missing = required - set(df.columns)
     if missing:
         st.error(f"Assumptions CSV missing columns: {missing}"); st.stop()
-
-    for c in ("category", "parent_option", "option", "value_type"):
+    for c in ("category","parent_option","option","value_type"):
         df[c] = df[c].astype(str).str.strip().str.lower()
-
     def _norm_vtype(s: str) -> str:
-        t = s.replace("_", "").replace("-", "").replace(" ", "")
-        if t in {"persf", "psf", "sf"}:   return "per_sf"
-        if t in {"perunit"}:              return "per_unit"
-        if t in {"fixed", "flat", "lump", "fixedcost"}: return "fixed"
+        t = s.replace("_","").replace("-","").replace(" ","")
+        if t in {"persf","psf","sf"}: return "per_sf"
+        if t in {"perunit"}:         return "per_unit"
+        if t in {"fixed","flat","lump","fixedcost"}: return "fixed"
         return s
-
     df["value_type"] = df["value_type"].map(_norm_vtype)
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     return df
 
 @st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: str(p)})
 def load_regions(files: dict[str, Path]) -> dict[str, pd.DataFrame]:
-    """
-    Load region affordability tables; ensure 'ami' exists and coerce numeric columns.
-    """
-    out: dict[str, pd.DataFrame] = {}
+    out = {}
     for name, p in files.items():
         if not p.exists():
             st.error(f"Missing region file for {name}: {p}"); st.stop()
@@ -123,7 +78,7 @@ def load_regions(files: dict[str, Path]) -> dict[str, pd.DataFrame]:
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
 
-# ===== Helpers (display + options) =====
+# ===== Helpers
 PRETTY_OVERRIDES = {
     "townhome":"Townhome  →  (ownership; individual entrance; generally larger than a condo)",
     "condo":"Condo  →  (ownership; entrance from a common corridor; generally smaller than a townhome)",
@@ -152,7 +107,6 @@ def pretty_short(x: str) -> str:
     return PRODUCT_SHORT.get(str(x).lower().strip(), str(x).title())
 
 def fmt_money(x) -> str:
-    """Robust currency formatter with comma thousands, no extra spaces."""
     try:
         v = float(x)
     except (TypeError, ValueError):
@@ -161,8 +115,7 @@ def fmt_money(x) -> str:
         return "—"
     return f"${int(round(v)):,}"
 
-def money_md(x: float | int | str) -> str:
-    """Return a Markdown-safe $ with comma thousands (no LaTeX)."""
+def money_md(x) -> str:
     try:
         v = float(x)
     except (TypeError, ValueError):
@@ -170,7 +123,6 @@ def money_md(x: float | int | str) -> str:
     if pd.isna(v):
         return "—"
     return f"\\${int(round(v)):,}"
-
 
 def _rows(cat, opt=None, parent=None):
     q = A["category"].eq(cat)
@@ -195,15 +147,13 @@ def bedroom_sf(h_type, br_label):
     return float(pd.to_numeric(r.iloc[0]["value"], errors="coerce")) if not r.empty else np.nan
 
 def bedroom_options(product_key: str) -> list[str]:
-    """Use the CSV to decide which bedroom counts to show (e.g., no 1-BR townhomes)."""
     rows = _rows("bedrooms", parent=product_key)
     if rows.empty:
-        # sensible fallback
         return ["2","3","4"] if product_key == "townhome" else ["1","2","3"]
     opts = sorted(rows["option"].astype(str).tolist(), key=lambda x: int(x))
     return opts
 
-# ===== Cost model pieces =====
+# ===== Cost model
 def mf_factor(h_type): return one_val("mf_efficiency_factor","default",h_type, default=1.0)
 def baseline_hard_per_sf(): return one_val("baseline_hard_cost","baseline")
 def soft_cost_pct(): return one_val("soft_cost","baseline")
@@ -214,71 +164,40 @@ def infra_per_unit(htype: str, opt: str) -> float:
 def bool_to_infra_opt(b: bool) -> str:
     return "yes" if bool(b) else "no"
 
-def overlay_totals(category: str, option: str | None, parents: list[str] | tuple[str, ...]):
-    """
-    Sum per_sf / per_unit / fixed values for a category across relevant rows:
-      - parent_option ∈ parents (e.g., [htype, "default"])
-      - option ∈ {"default", <selected option>}  (only "default" if option is None)
-    Returns: (per_sf, per_unit, fixed) as floats.
-    """
-    parent_vals = [p.lower() for p in parents]
-    if option is None or str(option).lower() == "default":
-        opts = ["default"]
-    else:
-        opts = ["default", str(option).lower()]
-
-    r = A[
-        (A["category"].eq(category)) &
-        (A["parent_option"].isin(parent_vals)) &
-        (A["option"].isin(opts))
-    ]
-
-    if r.empty:
-        return 0.0, 0.0, 0.0
-
-    vals = pd.to_numeric(r["value"], errors="coerce").fillna(0.0)
-    vtype = r["value_type"].astype(str).str.lower()
-    per_sf  = float(vals[vtype.eq("per_sf")].sum())
-    per_unit= float(vals[vtype.eq("per_unit")].sum())
-    fixed   = float(vals[vtype.eq("fixed")].sum())
-
+def _sum_by_types(cat: str, selected_opt: str|None, parents: list[str]):
+    mask = (A["category"].eq(cat)) & (A["parent_option"].isin([p.lower() for p in parents])) & (A["option"].isin([str(selected_opt).lower()]) if selected_opt else True)
+    sel = A.loc[mask]
+    base_mask = (A["category"].eq(cat)) & (A["parent_option"].isin([p.lower() for p in parents])) & (A["option"].eq("default"))
+    base = A.loc[base_mask]
+    df = pd.concat([sel, base], axis=0)
+    per_sf  = float(pd.to_numeric(df.loc[df["value_type"].eq("per_sf"),  "value"], errors="coerce").fillna(0).sum())
+    per_unit= float(pd.to_numeric(df.loc[df["value_type"].eq("per_unit"),"value"], errors="coerce").fillna(0).sum())
+    fixed   = float(pd.to_numeric(df.loc[df["value_type"].eq("fixed"),   "value"], errors="coerce").fillna(0).sum())
     return per_sf, per_unit, fixed
 
 def compute_tdc(sf, htype, code, src, infra, fin):
-    """Total Development Cost (per home), all values from assumptions.csv."""
     parents = [htype, "default"]
-
-    # --- HARD cost per sf w/ soft-cost multiplier ---
     base_hard_psf = baseline_hard_per_sf()
     mf_mult  = mf_factor(htype)
     pct_mult = (one_val("energy_code", code) + one_val("finish_quality", fin)) / 100.0
     hard_psf_before_soft = base_hard_psf * (mf_mult + pct_mult)
     hard_psf = hard_psf_before_soft * (1.0 + soft_cost_pct()/100.0)
-
-    # --- Policy/overlay components ---
-    es_psf, es_pu, es_fx   = overlay_totals("energy_source", src, parents)
-    acq_psf, acq_pu, acq_fx = overlay_totals("acq_cost", "baseline", parents)
+    es_psf, es_pu, es_fx     = _sum_by_types("energy_source", src, parents)
+    acq_psf, acq_pu, acq_fx  = _sum_by_types("acq_cost", "baseline", parents)
     infra_pu = infra_per_unit(htype, infra) if infra in ("yes", "no") else 0.0
-
-    EXCLUDE = {
-        "baseline_hard_cost","soft_cost","mf_efficiency_factor",
-        "energy_code","finish_quality","energy_source","new_neighborhood","bedrooms"
-    }
-    other = A[~A["category"].isin(EXCLUDE)]
+    exclude = {"baseline_hard_cost","soft_cost","mf_efficiency_factor","energy_code","finish_quality","energy_source","new_neighborhood","bedrooms","acq_cost"}
+    other = A[~A["category"].isin(exclude)]
     other = other[(other["option"].eq("default")) & (other["parent_option"].isin([htype, "default"]))]
-
-    other_psf = float(other.loc[other["value_type"].eq("per_sf"),  "value"].sum()) if not other.empty else 0.0
-    other_pu  = float(other.loc[other["value_type"].eq("per_unit"),"value"].sum()) if not other.empty else 0.0
-    other_fx  = float(other.loc[other["value_type"].eq("fixed"),   "value"].sum()) if not other.empty else 0.0
-
-    # --- Total (additive; order doesn’t change the sum) ---
+    other_psf = float(pd.to_numeric(other.loc[other["value_type"].eq("per_sf"),  "value"], errors="coerce").fillna(0).sum()) if not other.empty else 0.0
+    other_pu  = float(pd.to_numeric(other.loc[other["value_type"].eq("per_unit"),"value"], errors="coerce").fillna(0).sum()) if not other.empty else 0.0
+    other_fx  = float(pd.to_numeric(other.loc[other["value_type"].eq("fixed"),   "value"], errors="coerce").fillna(0).sum()) if not other.empty else 0.0
     total  = 0.0
-    total += sf * (hard_psf + es_psf + acq_psf + other_psf)   # per-sf pieces (acq_psf usually 0)
-    total += es_pu + acq_pu + other_pu + infra_pu             # per-unit pieces (acq_pu carries the $18k)
-    total += es_fx + acq_fx + other_fx                        # fixed adders (if any)
+    total += sf * (hard_psf + es_psf + acq_psf + other_psf)
+    total += es_pu + acq_pu + other_pu + infra_pu
+    total += es_fx + acq_fx + other_fx
     return total
 
-# ===== Price ↔ Income mapping (Chittenden engine) =====
+# ===== Price ↔ Income mapping
 def _best_buy_col_for_bed(df_cols, bed_n: int):
     avail = sorted([int(m.group(1)) for c in df_cols if (m:=re.match(r"buy(\d+)$", c))], key=int)
     if not avail: return None
@@ -308,7 +227,6 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
     def price_to_income(p):
         p_arr = np.asarray(p, dtype=float)
         out = np.empty_like(p_arr)
-        if out.size == 0: return out
         low  = p_arr <= xmin
         high = p_arr >= xmax
         mid  = ~(low | high)
@@ -319,7 +237,6 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
     def income_to_price(i):
         i_arr = np.asarray(i, dtype=float)
         out = np.empty_like(i_arr)
-        if out.size == 0: return out
         low  = i_arr <= ymin
         high = i_arr >= ymax
         mid  = ~(low | high)
@@ -335,7 +252,6 @@ def affordable_mask(user_income, required_incomes, eps=AFFORD_EPS):
     return np.isfinite(r) & ((ui + eps) >= r)
 
 def ami_percent_for_income(region_key: str, hh_size: int, required_income: float):
-    """Return (percent_ami, capped_bool). Floors to lower bracket; caps to 30/150 with '(at least)' handling upstream."""
     df = R[region_key].copy()
     col = f"income{hh_size}"
     if col not in df.columns: return None, False
@@ -355,7 +271,16 @@ def ami_percent_for_income(region_key: str, hh_size: int, required_income: float
     ami_frac = float(sub_le.iloc[-1]["ami"])
     return int(round(ami_frac*100)), False
 
-# ===== Chart Utils =====
+def _ami_line_for_region(pct: int | None, region_label: str, capped_low: bool, capped_high: bool) -> str:
+    is_county = region_label in ("Chittenden", "Addison")
+    if pct is None:
+        return f"—% of AMI in {region_label}{' County' if is_county else ''}."
+    if capped_high:
+        return "More than 150% of AMI in the rest of Vermont." if region_label == "Rest of Vermont" else f"More than 150% of Area Median Income in {region_label}{' County' if is_county else ''}."
+    suffix = " (at least)" if capped_low else ""
+    return f"{pct}% of AMI in the rest of Vermont{suffix}." if region_label == "Rest of Vermont" else f"{pct}% of Area Median Income in {region_label}{' County' if is_county else ''}{suffix}."
+
+# ===== Chart Utils
 def _bar_with_values(ax, labels, values, pad_ratio):
     bars = ax.bar(labels, values, color="#A7D3FF", edgecolor="black")
     for b in bars:
@@ -389,25 +314,7 @@ def draw_chart(labels, tdc_vals, afford_price, price_to_income, income_to_price)
     fig.tight_layout()
     st.pyplot(fig)
 
-def _ami_line_for_region(pct: int | None, region_label: str, capped_low: bool, capped_high: bool) -> str:
-    """Readable AMI sentence for one region; appends 'County' for Chittenden/Addison."""
-    is_county = region_label in ("Chittenden", "Addison")
-    if pct is None:
-        return f"—% of AMI in {region_label}{' County' if is_county else ''}."
-    if capped_high:
-        return (
-            "More than 150% of AMI in the rest of Vermont."
-            if region_label == "Rest of Vermont"
-            else f"More than 150% of Area Median Income in {region_label}{' County' if is_county else ''}."
-        )
-    suffix = " (at least)" if capped_low else ""
-    return (
-        f"{pct}% of AMI in the rest of Vermont{suffix}."
-        if region_label == "Rest of Vermont"
-        else f"{pct}% of Area Median Income in {region_label}{' County' if is_county else ''}{suffix}."
-    )
-
-# ===== Session State (units) =====
+# ===== Session State (units)
 def _ensure_units(n, product_key="townhome"):
     if "units" not in st.session_state:
         st.session_state.units = []
@@ -432,7 +339,6 @@ def _update_component(i, field, value):
     st.session_state.units[i]["components"][field] = value
 
 def _maybe_update_labels_on_product_change(old_prod: str, new_prod: str):
-    """If a unit's label still looks like the default for the old product, rewrite to the new product's short default."""
     if "units" not in st.session_state:
         return
     old_short = pretty_short(old_prod)
@@ -445,7 +351,7 @@ def _maybe_update_labels_on_product_change(old_prod: str, new_prod: str):
             st.session_state.units[idx]["custom_label"] = new_default
             st.session_state[f"label_{idx}"] = new_default
 
-# ===== Unit card (Step 2) =====
+# ===== Unit card (Step 2)
 def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
     u = st.session_state.units[i]
     with st.container(border=True):
@@ -495,38 +401,25 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
     return {"label": label, "code": st.session_state[f"code_{i}"], "src": st.session_state[f"src_{i}"],
             "infra": st.session_state.units[i]["components"]["infra"], "fin": st.session_state[f"fin_{i}"]}
 
-# ===== Header =====
+# ===== Header
 st.title("🏘️ Housing Affordability Visualizer")
 st.write("This tool allows you to see how housing policy directly impacts whether Vermonters at various income levels are able to afford housing.")
 st.write("“Build” one type of housing or compare multiple. Can you afford new construction in Vermont?")
-
-st.markdown(
-    '[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)'
-    ' &nbsp;|&nbsp; '
-    '[VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)',
-    unsafe_allow_html=True
-)
+st.write("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)  |  [VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 st.divider()
 
-# ===== Step 1 – Choose the Housing Type =====
+# ===== Step 1 – Choose the Housing Type
 st.header("Step 1 – Choose the Housing Type")
 
 prev_prod = st.session_state.get("global_product_prev", "townhome")
-
-product = st.radio(
-    "**What kind of housing are we talking about?**",
-    ["townhome","condo","apartment"],
-    format_func=pretty,
-    horizontal=False,
-    key="global_product",)
+product = st.radio("**What kind of housing are we talking about?**", ["townhome","condo","apartment"],
+                   format_func=pretty, horizontal=False, key="global_product")
 st.write("")
-
 if product != prev_prod:
     _maybe_update_labels_on_product_change(prev_prod, product)
     st.session_state["global_product_prev"] = product
 
 apartment_mode = (product == "apartment")
-
 if not apartment_mode:
     st.markdown("**Number of bedrooms**")
     br_opts = bedroom_options(product)
@@ -540,7 +433,7 @@ else:
 
 st.divider()
 
-# ===== Step 2 – How do you want the housing built? =====
+# ===== Step 2 – How do you want the housing built?
 st.header("Step 2 – How do you want the housing built?")
 if "num_units" not in st.session_state:
     st.session_state.num_units = 1
@@ -556,15 +449,12 @@ for i in range(st.session_state.num_units):
     st.write("")
 st.divider()
 
-# ===== Step 3 – Who can afford this home? =====
+# ===== Step 3 – Who can afford this home?
 st.header("Step 3 – Who can afford this home?")
 
-# --- Context box shown above the household-size picker ---
-hh_preview = int(st.session_state.get("household_size", 4))
+hh_preview = int(st.session_state.get("household_size", 1))
 if not apartment_mode and bedrooms is not None:
-    _p2i, _i2p, inc_min_box, inc_max_box, *_ = build_price_income_transformers(
-        "Chittenden", hh_preview, int(bedrooms)
-    )
+    _p2i, _i2p, inc_min_box, inc_max_box, *_ = build_price_income_transformers("Chittenden", hh_preview, int(bedrooms))
     if inc_min_box is None or inc_max_box is None or not np.isfinite(inc_min_box) or not np.isfinite(inc_max_box):
         inc_min_box, inc_max_box = 20000, 300000
 else:
@@ -572,18 +462,12 @@ else:
 
 with st.container(border=True):
     st.subheader("**Before choosing *household size*, you should know...**")
-
     st.markdown("\n".join([
         "- 2.4 = Average VT household size",
-        "- 70% = Vermonters living in 1- or 2-person households, [VHFA]"
-        "(https://vhfa.org/sites/default/files/documents/publications/VT-HNA-2025-Factsheet-7-HHsize.pdf)",
+        "- 70% = Vermonters living in 1- or 2-person households, [VHFA](https://vhfa.org/sites/default/files/documents/publications/VT-HNA-2025-Factsheet-7-HHsize.pdf)",
     ]))
-
     st.subheader("**Before choosing *household income*, you should know...**")
-    st.markdown(
-        f"- {money_md(85260)} = Statewide Median Household Income, [2024]"
-        "(https://fred.stlouisfed.org/series/MEHOINUSVTA672N)"
-    )
+    st.markdown(f"- {money_md(85260)} = Statewide Median Household Income, [2024](https://fred.stlouisfed.org/series/MEHOINUSVTA672N)")
     st.markdown("\n".join([
         "- **Average pay for priority professions in Vermont:**",
         f"  - ~{money_md(42000)} = Early-childhood educator",
@@ -593,10 +477,7 @@ with st.container(border=True):
         f"  - ~{money_md(90000)} = RN @ UVM Medical",
     ]))
 
-household_size = st.radio(
-    "**Select household size**",
-    list(range(1, 9)),
-    index=0, horizontal=True, key="household_size",)
+household_size = st.radio("**Select household size**", list(range(1, 9)), index=0, horizontal=True, key="household_size")
 
 if not apartment_mode and bedrooms is not None:
     p2i_b, i2p_b, inc_min_b, inc_max_b, *_ = build_price_income_transformers("Chittenden", int(household_size), int(bedrooms))
@@ -608,10 +489,7 @@ if not apartment_mode and bedrooms is not None:
 else:
     min_income, max_income = 20000, 300000
 
-st.caption(
-    f"{money_md(inc_min_box)} to {money_md(inc_max_box)} = "
-    f"minimum/maximum income allowed for this household size."
-)
+st.caption(f"{money_md(inc_min_box)} to {money_md(inc_max_box)} = minimum/maximum income allowed for this household size.")
 
 st.write("How much do you think a Vermont household needs to make to afford this home?")
 default_income = int(np.clip(100000, min_income, max_income))
@@ -620,18 +498,14 @@ if "user_income" not in st.session_state:
 else:
     st.session_state["user_income"] = int(np.clip(st.session_state["user_income"], min_income, max_income))
 
-st.number_input(
-    " ", min_value=min_income, max_value=max_income, step=1000,
-    key="user_income", format="%d", label_visibility="collapsed"
-)
+st.number_input(" ", min_value=min_income, max_value=max_income, step=1000, key="user_income", format="%d", label_visibility="collapsed")
 user_income = float(st.session_state["user_income"])
 
 st.write("")
-
 st.subheader("Let’s see how you did!")
 show_results = st.toggle("View the home you built", value=False, key="view_home_toggle")
 
-# ===== Results (Graph + Messaging) =====
+# ===== Results (Graph + Messaging)
 if show_results:
     if not apartment_mode:
         labels, tdc_vals = [], []
@@ -640,7 +514,6 @@ if show_results:
             labels.append(label)
             tdc_vals.append(compute_tdc(sf, product, u["code"], u["src"], u["infra"], u["fin"]))
 
-        # Chittenden mapping (fixed engine)
         p2i, i2p, *_ = build_price_income_transformers("Chittenden", int(household_size), int(bedrooms))
         if p2i is None or i2p is None:
             st.warning("Not enough data to build the price↔income mapping for this selection.")
@@ -666,68 +539,45 @@ if show_results:
                     st.success("Congrats! The total development cost for all options are less than the income required to buy them.")
                 elif k == 1:
                     st.success(f"Congrats! The total development cost for **{affordable_labels[0]}** is less than the income required to buy it.")
-                else:  # k == 2
-                    st.success(
-                        f"Congrats! The total development cost for **{affordable_labels[0]}** & **{affordable_labels[1]}** "
-                        "are less than the income required to buy them."
-                    )
+                else:
+                    st.success(f"Congrats! The total development cost for **{affordable_labels[0]}** & **{affordable_labels[1]}** are less than the income required to buy them.")
 
             st.write("")
 
-            # ---------- “More about this home” ----------
             for idx, label in enumerate(labels):
                 req_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
-            
                 with st.container(border=True):
                     st.subheader(title)
-            
-                    bullets = []
-                    bullets.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
-                    bullets.append("- This is only affordable for **0 of the 270,000 households in Vermont**.")
-                    bullets.append("- To afford this home, you would need to make:")
-            
-                    sub_lines = []
+                    st.markdown(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
+                    st.markdown("- This is only affordable for **0 of the 270,000 households in Vermont**.")
+                    st.markdown("- To afford this home, you would need to make:")
                     for rp in ["Chittenden", "Addison", "Rest of Vermont"]:
                         reg_key_line = PRETTY2REG[rp]
                         pct, capped = ami_percent_for_income(reg_key_line, int(household_size), req_inc)
                         capped_low  = (pct == 30  and capped)
                         capped_high = (pct == 150 and capped)
-                        sub_lines.append(f"    - {_ami_line_for_region(pct, rp, capped_low, capped_high)}")
-            
-                    st.markdown("\n".join(bullets + sub_lines))
-
+                        st.markdown(f"  - {_ami_line_for_region(pct, rp, capped_low, capped_high)}")
                 st.write("")
 
-        # ---------- Compare controls (stable position; no jump to top) ----------
-        st.markdown("<div id='compare_controls_anchor'></div>", unsafe_allow_html=True)
-        
-        st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
-        
-        st.write("**⬆️ Return to Step 2 to tweak your first home / add others, then view the graph to compare.**")
-        
-        if "num_units" not in st.session_state:
-            st.session_state.num_units = 1
-        prev_units = int(st.session_state.num_units)
-        
-        compare_choice = st.radio(
-            "**How many homes do you want to build?**",
-            [1, 2, 3],
-            index={1: 0, 2: 1, 3: 2}[prev_units],
-            horizontal=True,
-            format_func=lambda n: "1 home (current setting)" if n == 1 else f"{n} homes",
-            key="compare_units_radio",
-        )
-        
-        if int(compare_choice) != prev_units:
-            st.session_state.num_units = int(compare_choice)
-            _ensure_and_get_units()
-            import streamlit.components.v1 as components
-            components.html("<script>sessionStorage.setItem('scroll_to_anchor_flag','1');</script>", height=0)
-            st.rerun()
-        
-        if st.session_state.num_units > 1:
-            st.write("⬆️ Scroll back to **Step 2** to build your additional home(s).")
-
+            st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
+            st.write("")
+            st.write("**⬆️ Return to Step 2 to tweak your first home / add others, then view the graph to compare.**")
+            st.write("")
+            if "num_units" not in st.session_state:
+                st.session_state.num_units = 1
+            prev_units = int(st.session_state.num_units)
+            compare_choice = st.radio("**How many homes do you want to build?**",
+                                      [1, 2, 3],
+                                      index={1:0, 2:1, 3:2}[prev_units],
+                                      horizontal=True,
+                                      format_func=lambda n: "1 home (current setting)" if n == 1 else f"{n} homes",
+                                      key="compare_units_radio")
+            if int(compare_choice) != prev_units:
+                st.session_state.num_units = int(compare_choice)
+                _ensure_and_get_units()
+                st.rerun()
+            if st.session_state.num_units > 1:
+                st.write("⬆️ Scroll back to **Step 2** to build your additional home(s).")
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
