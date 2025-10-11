@@ -83,12 +83,17 @@ def _load_vt_income_dist(p: Path) -> pd.DataFrame:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
     return df.sort_values("hh_income").reset_index(drop=True)
 
-def households_share_at_or_above(required_income: float,
-                                 denom_total_hhs: int = 270_000,
-                                 csv_path: Path = DATA / "vt_inc_dist.csv") -> tuple[int, str]:
+def households_share_at_or_above(
+    required_income: float,
+    denom_total_hhs: int = 270_000,
+    csv_path: Path = DATA / "vt_inc_dist.csv",
+    denom: int | None = None,
+) -> tuple[int, str]:
+    if denom is not None:
+        denom_total_hhs = denom
     df = _load_vt_income_dist(csv_path)
     thr = float(required_income)
-    mask = df["hh_income"] > thr  # strict '>' fixes boundary overcount
+    mask = df["hh_income"] > thr
     count = int(df.loc[mask, "num_hhs"].sum())
     pct = (count / float(denom_total_hhs)) * 100.0 if denom_total_hhs else 0.0
     pct_str = f"{pct:.1f}".rstrip("0").rstrip(".")
