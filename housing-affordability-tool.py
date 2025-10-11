@@ -131,9 +131,15 @@ def pretty(x: str) -> str:
 def pretty_short(x: str) -> str:
     return PRODUCT_SHORT.get(str(x).lower().strip(), str(x).title())
 
-def fmt_money(x):
-    val = pd.to_numeric(x, errors="coerce")
-    return "—" if pd.isna(val) else f"${val:,.0f}"
+def fmt_money(x) -> str:
+    """Robust currency formatter with comma thousands, no extra spaces."""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        v = pd.to_numeric(x, errors="coerce")
+    if pd.isna(v):
+        return "—"
+    return f"${int(round(v)):,}"
 
 def _rows(cat, opt=None, parent=None):
     q = A["category"].eq(cat)
@@ -504,6 +510,26 @@ st.divider()
 # ===== Step 3 – Who can afford this home? =====
 st.header("Step 3 – Who can afford this home?")
 
+# --- Context box shown above the household-size picker ---
+hh_preview = int(st.session_state.get("household_size", 4))
+if not apartment_mode and bedrooms is not None:
+    _p2i, _i2p, inc_min_box, inc_max_box, *_ = build_price_income_transformers(
+        "Chittenden", hh_preview, int(bedrooms)
+    )
+    if inc_min_box is None or inc_max_box is None or not np.isfinite(inc_min_box) or not np.isfinite(inc_max_box):
+        inc_min_box, inc_max_box = 20000, 300000
+else:
+    inc_min_box, inc_max_box = 20000, 300000
+
+with st.container(border=True):
+    st.subheader("Context for this step")
+    st.markdown("- 2.4 = Average VT household size; 70% of VTers are in 1- or 2-person households")
+    st.markdown("- $85,000 = Statewide Median Household Income")
+    st.markdown(
+        f"- *Minimum/maximum income allowed for this household size:* "
+        f"{fmt_money(inc_min_box)} to {fmt_money(inc_max_box)}"
+    )
+
 household_size = st.radio(
     "**Select household size**",
     list(range(1, 9)),
@@ -533,16 +559,8 @@ st.number_input(
 )
 user_income = float(st.session_state["user_income"])
 
-# Grey note (caption) directly under the entry
-st.caption(
-    f"Minimum/maximum income allowed for this household size: "
-    f"{fmt_money(min_income)} to {fmt_money(max_income)}. ")
 st.write("")
 
-st.write("Note – *Statewide Median Household Income: $85,000*")
-st.write("Average VT household size is 2.4; ~70% of Vermonters are in 1- or 2-person households.")
-
-st.write("")
 st.subheader("Let’s see how you did!")
 show_results = st.toggle("View the home you built", value=False, key="view_home_toggle")
 
