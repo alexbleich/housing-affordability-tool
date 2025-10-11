@@ -591,9 +591,9 @@ if show_results:
                     st.markdown("\n".join(lines + sub_lines))
                 st.write("")
 
-            st.subheader(
-                "Want to try again? Build another home (or two!) and use the graph to compare to your first attempt. "
-            "To tweak your first home and/or build your new one(s), *return to Step 2*."
+            st.subheader("Want to try again?")
+            st.write("Build another home (or two!) and use the graph to compare to your first attempt. "
+                "To tweak your first home and/or build your new one(s), *return to Step 2*."
             )
             st.write("")
             if "num_units" not in st.session_state:
