@@ -548,22 +548,22 @@ if show_results:
                 req_inc = float(p2i(np.array([tdc_vals[idx]]))[0])
                 title = "More About This Home" if len(labels) == 1 else f"More About {label}"
                 with st.container(border=True):
-                st.subheader(title)
-            
-                lines = []
-                lines.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
-                lines.append("- This is only affordable for **0 of the 270,000 households in Vermont**.")
-                lines.append("- To afford this home, you would need to make:")
-            
-                sub_lines = []
-                for rp in ["Chittenden", "Addison", "Rest of Vermont"]:
-                    reg_key_line = PRETTY2REG[rp]
-                    pct, capped = ami_percent_for_income(reg_key_line, int(household_size), req_inc)
-                    capped_low  = (pct == 30  and capped)
-                    capped_high = (pct == 150 and capped)
-                    sub_lines.append(f"  - {_ami_line_for_region(pct, rp, capped_low, capped_high)}")
-            
-                st.markdown("\n".join(lines + sub_lines))
+                    st.subheader(title)
+                
+                    lines = []
+                    lines.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
+                    lines.append("- This is only affordable for **0 of the 270,000 households in Vermont**.")
+                    lines.append("- To afford this home, you would need to make:")
+                
+                    sub_lines = []
+                    for rp in ["Chittenden", "Addison", "Rest of Vermont"]:
+                        reg_key_line = PRETTY2REG[rp]
+                        pct, capped = ami_percent_for_income(reg_key_line, int(household_size), req_inc)
+                        capped_low  = (pct == 30  and capped)
+                        capped_high = (pct == 150 and capped)
+                        sub_lines.append(f"  - {_ami_line_for_region(pct, rp, capped_low, capped_high)}")
+                
+                    st.markdown("\n".join(lines + sub_lines))
                 st.write("")
 
             st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
