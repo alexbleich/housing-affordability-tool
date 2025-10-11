@@ -541,7 +541,7 @@ with st.container(border=True):
     ]))
 
     st.subheader("**Before choosing *household income*, you should know...**")
-    st.markdown(f"- *{money_md(85000)} = Statewide Median Household Income*")
+    st.markdown(f"- *{money_md(85000)}* = Statewide Median Household Income")
 
     st.markdown(
         "**Average pay for priority professions in Vermont:**\n"
