@@ -534,11 +534,12 @@ else:
 
 with st.container(border=True):
     st.subheader("Context for this step")
-    st.markdown("- 2.4 = Average VT household size; 70% of VTers are in 1- or 2-person households")
+    st.markdown("- 2.4 = Average VT household size")
+    st.markdown("70% of VTers are in 1- or 2-person households")
     st.markdown(f"- {money_md(85000)} = Statewide Median Household Income")
     st.markdown(
-        f"- *Minimum/maximum income allowed for this household size:* "
-        f"{money_md(inc_min_box)} to {money_md(inc_max_box)}"
+        f"- {money_md(inc_min_box)} to {money_md(inc_max_box)} = "
+        f"minimum/maximum income allowed for this household size."
     )
 
 household_size = st.radio(
