@@ -718,32 +718,39 @@ if show_results:
         
         _ensure_and_get_units()
 
-            # ---------- Compare controls (stable position; no jump to top) ----------
+        # ---------- Compare controls (stable position; no jump to top) ----------
         st.markdown("<div id='compare_controls_anchor'></div>", unsafe_allow_html=True)
         
         st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
+        
+        # Show the hint line always; it's just informational text.
         st.write("**⬆️ Return to Step 2 to tweak your first home / add others, then view the graph to compare.**")
         
+        # Session value we actually use for unit count
         if "num_units" not in st.session_state:
             st.session_state.num_units = 1
-        
         prev_units = int(st.session_state.num_units)
         
+        # IMPORTANT: give this radio a UNIQUE key
         compare_choice = st.radio(
             "**How many homes do you want to build?**",
             [1, 2, 3],
-            index={1:0, 2:1, 3:2}[prev_units],
+            index={1: 0, 2: 1, 3: 2}[prev_units],
             horizontal=True,
             format_func=lambda n: "1 home (current setting)" if n == 1 else f"{n} homes",
-            key="num_units",
+            key="compare_units_radio",  # <-- different from "num_units"
         )
         
+        # Apply the choice to the canonical state and refresh Step 2 immediately
         if int(compare_choice) != prev_units:
-            _ensure_and_get_units()
-            st.session_state["_scroll_to_compare_anchor"] = True
+            st.session_state.num_units = int(compare_choice)
+            _ensure_and_get_units()  # create/trim units right away
+            # set one-shot browser flag so we scroll back here after rerun
+            import streamlit.components.v1 as components
             components.html("<script>sessionStorage.setItem('scroll_to_anchor_flag','1');</script>", height=0)
             st.rerun()
         
+        # Plain white hint when building >1 home
         if st.session_state.num_units > 1:
             st.write("⬆️ Scroll back to **Step 2** to build your additional home(s).")
 
