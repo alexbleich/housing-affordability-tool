@@ -682,11 +682,9 @@ if show_results:
         # ---------- Compare controls (bind the radio directly to session state) ----------
         st.subheader("Want to try again? Build another option (or two!) and compare to your first attempt")
         
-        # Initialize once
         if "num_units" not in st.session_state:
             st.session_state.num_units = 1
         
-        # Simple, stable radio: no dynamic index, no extra state var
         st.radio(
             "**How many homes do you want to build?**",
             [1, 2, 3],
@@ -695,12 +693,11 @@ if show_results:
             format_func=lambda n: "1 home (current setting)" if n == 1 else f"{n} homes",
         )
         
-        # Ensure unit cards exist for the new choice (implicit rerun already happened)
         _ensure_and_get_units()
+        st.write("")
         
-        # Plain white hint that persists whenever >1 is selected
         if st.session_state.num_units > 1:
-            st.write("⬆️ Scroll back to **Step 2** to build your additional home(s), then view the graph to compare.")
+            st.subheader("⬆️ Scroll back to **Step 2** to build your additional home(s), then view the graph to compare.")
 
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
