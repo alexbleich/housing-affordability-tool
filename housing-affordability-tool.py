@@ -578,7 +578,7 @@ if show_results:
                     lines = []
                     lines.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
                     lines.append(f"- This is only affordable for about **{x_hhs:,} of the ~270,000 ({pct_display}%) households** in Vermont."
-                                 f"[Source](https://www.incomebyzipcode.com/vermont#families)"
+                                 f" [Source](https://www.incomebyzipcode.com/vermont#families)"
                                 )
                     lines.append("- To afford this home, you would need to make:")
                 
