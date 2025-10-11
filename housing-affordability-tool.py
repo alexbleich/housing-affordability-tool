@@ -542,16 +542,14 @@ with st.container(border=True):
         f"- {money_md(85260)} = Statewide Median Household Income, [2024]"
         "(https://fred.stlouisfed.org/series/MEHOINUSVTA672N)"
     )
-    st.markdown(
-        "**Average pay for priority professions in Vermont:**\n"
-        + "\n".join([
-            f"- ~{money_md(42000)} = Early-childhood educator",
-            f"- ~{money_md(55000)} = School-age teacher",
-            f"- ~{money_md(70000)} = Firefighter/police officer",
-            f"- ~{money_md(75000)} = Plumber/electrician",
-            f"- ~{money_md(90000)} = RN @ UVM Medical",
-        ])
-    )
+    st.markdown("\n".join([
+        "- **Average pay for priority professions in Vermont:**",
+        f"  - ~{money_md(42000)} = Early-childhood educator",
+        f"  - ~{money_md(55000)} = School-age teacher",
+        f"  - ~{money_md(70000)} = Firefighter/police officer",
+        f"  - ~{money_md(75000)} = Plumber/electrician",
+        f"  - ~{money_md(90000)} = RN @ UVM Medical",
+    ]))
 
 household_size = st.radio(
     "**Select household size**",
