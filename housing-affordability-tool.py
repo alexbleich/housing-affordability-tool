@@ -697,7 +697,7 @@ if show_results:
         st.write("")
         
         if st.session_state.num_units > 1:
-            st.subheader("⬆️ Scroll back to **Step 2** to build your additional home(s), then view the graph to compare.")
+            st.subheader("⬆️ Return to Step 2 to tweak your first home / add others, then view the graph to compare.")
 
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
