@@ -593,7 +593,7 @@ if show_results:
 
             st.subheader(
                 "Want to try again? Build another option (or two!) and compare to your first attempt. "
-            "*⬆️ Return to Step 2* to tweak your first home / add others, then view the graph to compare."
+            "*Return to Step 2* to tweak your first home / add others, then view the graph to compare."
             )
             st.write("")
             st.write("*⬆️ Return to Step 2* to tweak your first home / add others, then view the graph to compare.")
