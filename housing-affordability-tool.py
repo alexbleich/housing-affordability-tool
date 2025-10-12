@@ -319,11 +319,11 @@ def ami_percent_for_income(region_key: str, hh_size: int, required_income: float
 def _ami_line_for_region(pct: int | None, region_label: str, capped_low: bool, capped_high: bool) -> str:
     is_county = region_label in ("Chittenden", "Addison")
     if pct is None:
-        return f"—% of AMI in {region_label}{' County' if is_county else ''}."
+        return f"—% of Area Median Income in {region_label}{' County' if is_county else ''}."
     if capped_high:
-        return "More than 150% of AMI in the rest of Vermont." if region_label == "Rest of Vermont" else f"More than 150% of Area Median Income in {region_label}{' County' if is_county else ''}."
+        return "More than 150% of Area Median Income in the rest of Vermont." if region_label == "Rest of Vermont" else f"More than 150% of Area Median Income in {region_label}{' County' if is_county else ''}."
     suffix = " (at least)" if capped_low else ""
-    return f"{pct}% of AMI in the rest of Vermont{suffix}." if region_label == "Rest of Vermont" else f"{pct}% of Area Median Income in {region_label}{' County' if is_county else ''}{suffix}."
+    return f"{pct}% of Area Median Income in the rest of Vermont{suffix}." if region_label == "Rest of Vermont" else f"{pct}% of Area Median Income in {region_label}{' County' if is_county else ''}{suffix}."
 
 # ===== Chart Utils =====
 def _bar_with_values(ax, labels, values, pad_ratio):
