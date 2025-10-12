@@ -1,6 +1,6 @@
 # Assumptions
 
-This is designed to be a clear explanation of how inputs in `assumptions.csv` flow through the model, how prices map to income, and what simplifications we make. This is meant for policymakers and non-coders.
+This page is intends to provide a clear explanation of how inputs in `assumptions.csv` flow through the model, how prices map to income, and what simplifications we make. This is meant for policymakers and non-coders.
 
 ## What the model does (at a glance)
 
