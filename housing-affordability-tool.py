@@ -601,8 +601,8 @@ if show_results:
                     lines = []
                     lines.append(f"- You would need to have a household income of **{fmt_money(req_inc)}** to afford this home.")
                     lines.append(
-                        f"- This home is affordable for about **[{pct_display}%](https://www.incomebyzipcode.com/vermont#families)** "
-                        f"of Vermont’s ~270,000 households (~{x_hhs:,})."
+                        f"- This home is affordable for about **[{pct_display}%](https://www.incomebyzipcode.com/vermont#families) "
+                        f"of Vermont’s 270,000 households (~{x_hhs:,})."
                     )
                     lines.append("- To afford this home, you would need to make:")
                 
@@ -629,7 +629,7 @@ if show_results:
                                       [1, 2, 3],
                                       index={1:0, 2:1, 3:2}[prev_units],
                                       horizontal=True,
-                                      format_func=lambda n: "1 home (current setting)" if n == 1 else f"{n} homes",
+                                      format_func=lambda n: "1 home (default setting)" if n == 1 else f"{n} homes",
                                       key="compare_units_radio")
             if int(compare_choice) != prev_units:
                 st.session_state.num_units = int(compare_choice)
