@@ -1,4 +1,4 @@
-# ===== Imports & Paths
+# ===== Imports & Paths =====
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -8,7 +8,7 @@ import re
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
-# ===== Paths, files, constants
+# ===== Paths, files, constants =====
 @dataclass(frozen=True)
 class Paths:
     root: Path
@@ -35,7 +35,7 @@ AFFORD_EPS = 0.5
 ENERGY_CODE_ORDER = ["vt_energy_code", "rbes", "passive_house"]
 DEFAULT_COMPONENTS = dict(code="vt_energy_code", src="natural_gas", infra="no", fin="average")
 
-# ===== Data Loading
+# ===== Data Loading =====
 @st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: str(p)})
 def load_assumptions(p: Path) -> pd.DataFrame:
     if not p.exists():
@@ -79,25 +79,51 @@ def load_regions(files: dict[str, Path]) -> dict[str, pd.DataFrame]:
 def _load_vt_income_dist(p: Path) -> pd.DataFrame:
     df = pd.read_csv(p)
     df.columns = df.columns.str.strip().str.lower()
-    for c in ("hh_income", "num_hhs", "percent_hhs"):
-        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
-    return df.sort_values("hh_income").reset_index(drop=True)
+    df["hh_income"]   = pd.to_numeric(df.get("hh_income"),   errors="coerce")
+    df["num_hhs"]     = pd.to_numeric(df.get("num_hhs"),     errors="coerce")
+    df["percent_hhs"] = pd.to_numeric(df.get("percent_hhs"), errors="coerce")
+    df = df.dropna(subset=["hh_income","num_hhs"]).sort_values("hh_income").reset_index(drop=True)
+
+    lowers = [0.0]
+    for i in range(1, len(df)):
+        lowers.append(float(df.loc[i-1, "hh_income"]))
+    df["lower"] = pd.Series(lowers, index=df.index).astype(float)
+    df["upper"] = df["hh_income"].astype(float)
+    if (df["upper"] <= df["lower"]).any():
+        st.error("Income distribution bins have non-positive width; check vt_inc_dist.csv"); st.stop()
+    return df[["lower","upper","num_hhs","percent_hhs"]]
 
 def households_share_at_or_above(
     required_income: float,
     denom_total_hhs: int = 270_000,
     csv_path: Path = DATA / "vt_inc_dist.csv",
+    denom: int | None = None,
 ) -> tuple[int, float]:
+    if denom is not None:
+        denom_total_hhs = denom
     df = _load_vt_income_dist(csv_path)
-    thr = float(required_income)
-    count = int(df.loc[df["hh_income"] > thr, "num_hhs"].sum())
+    x = float(required_income)
+    full = float(df.loc[df["lower"] >= x, "num_hhs"].sum())
+    part = df[(df["lower"] < x) & (x < df["upper"])]
+    partial = 0.0
+    if not part.empty:
+        row = part.iloc[0]
+        L, U, N = float(row["lower"]), float(row["upper"]), float(row["num_hhs"])
+        frac = (U - x) / (U - L)
+        frac = max(0.0, min(1.0, frac))
+        partial = N * frac
+    elif x <= float(df["lower"].min()):
+        return int(denom_total_hhs), 100.0
+
+    count = int(round(full + partial))
+    count = max(0, min(count, int(denom_total_hhs)))
     pct = (count / float(denom_total_hhs)) * 100.0 if denom_total_hhs else 0.0
     return count, pct
 
 A = load_assumptions(ASSUMP)
 R = load_regions(REGIONS)
 
-# ===== Helpers
+# ===== Helpers =====
 PRETTY_OVERRIDES = {
     "townhome":"Townhome  →  (ownership; individual entrance; generally larger than a condo)",
     "condo":"Condo  →  (ownership; entrance from a common corridor; generally smaller than a townhome)",
@@ -172,7 +198,7 @@ def bedroom_options(product_key: str) -> list[str]:
     opts = sorted(rows["option"].astype(str).tolist(), key=lambda x: int(x))
     return opts
 
-# ===== Cost model
+# ===== Cost model =====
 def mf_factor(h_type): return one_val("mf_efficiency_factor","default",h_type, default=1.0)
 def baseline_hard_per_sf(): return one_val("baseline_hard_cost","baseline")
 def soft_cost_pct(): return one_val("soft_cost","baseline")
@@ -216,7 +242,7 @@ def compute_tdc(sf, htype, code, src, infra, fin):
     total += es_fx + acq_fx + other_fx
     return total
 
-# ===== Price ↔ Income mapping
+# ===== Price ↔ Income mapping =====
 def _best_buy_col_for_bed(df_cols, bed_n: int):
     avail = sorted([int(m.group(1)) for c in df_cols if (m:=re.match(r"buy(\d+)$", c))], key=int)
     if not avail: return None
@@ -299,7 +325,7 @@ def _ami_line_for_region(pct: int | None, region_label: str, capped_low: bool, c
     suffix = " (at least)" if capped_low else ""
     return f"{pct}% of AMI in the rest of Vermont{suffix}." if region_label == "Rest of Vermont" else f"{pct}% of Area Median Income in {region_label}{' County' if is_county else ''}{suffix}."
 
-# ===== Chart Utils
+# ===== Chart Utils =====
 def _bar_with_values(ax, labels, values, pad_ratio):
     bars = ax.bar(labels, values, color="#A7D3FF", edgecolor="black")
     for b in bars:
@@ -333,7 +359,7 @@ def draw_chart(labels, tdc_vals, afford_price, price_to_income, income_to_price)
     fig.tight_layout()
     st.pyplot(fig)
 
-# ===== Session State (units)
+# ===== Session State (units) =====
 def _ensure_units(n, product_key="townhome"):
     if "units" not in st.session_state:
         st.session_state.units = []
@@ -370,7 +396,7 @@ def _maybe_update_labels_on_product_change(old_prod: str, new_prod: str):
             st.session_state.units[idx]["custom_label"] = new_default
             st.session_state[f"label_{idx}"] = new_default
 
-# ===== Unit card (Step 2)
+# ===== Unit card (Step 2) =====
 def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
     u = st.session_state.units[i]
     with st.container(border=True):
@@ -420,14 +446,14 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
     return {"label": label, "code": st.session_state[f"code_{i}"], "src": st.session_state[f"src_{i}"],
             "infra": st.session_state.units[i]["components"]["infra"], "fin": st.session_state[f"fin_{i}"]}
 
-# ===== Header
+# ===== Header =====
 st.title("🏘️ Housing Affordability Visualizer")
 st.write("This tool allows you to see how housing policy directly impacts whether Vermonters at various income levels are able to afford housing.")
 st.write("“Build” one type of housing or compare multiple. Can you afford new construction in Vermont?")
 st.write("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)  |  [VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 st.divider()
 
-# ===== Step 1 – Choose the Housing Type
+# ===== Step 1 – Choose the Housing Type =====
 st.header("Step 1 – Choose the Housing Type")
 
 prev_prod = st.session_state.get("global_product_prev", "townhome")
@@ -452,7 +478,7 @@ else:
 
 st.divider()
 
-# ===== Step 2 – How do you want the housing built?
+# ===== Step 2 – How do you want the housing built? =====
 st.header("Step 2 – How do you want the housing built?")
 if "num_units" not in st.session_state:
     st.session_state.num_units = 1
@@ -468,7 +494,7 @@ for i in range(st.session_state.num_units):
     st.write("")
 st.divider()
 
-# ===== Step 3 – Who can afford this home?
+# ===== Step 3 – Who can afford this home? =====
 st.header("Step 3 – Who can afford this home?")
 
 hh_preview = int(st.session_state.get("household_size", 1))
@@ -524,7 +550,7 @@ st.write("")
 st.subheader("Let’s see how you did!")
 show_results = st.toggle("View the home you built", value=False, key="view_home_toggle")
 
-# ===== Results (Graph + Messaging)
+# ===== Results (Graph + Messaging) =====
 if show_results:
     if not apartment_mode:
         labels, tdc_vals = [], []
@@ -592,7 +618,7 @@ if show_results:
                 st.write("")
 
             st.subheader("Want to try again?")
-            st.write("Build another home (or two!) and use the graph to compare to your first attempt. "
+            st.write("Build another home (or two!) and use the graph to compare with your first attempt. "
                 "To tweak your first home and/or build your new one(s), *return to Step 2*."
             )
 
