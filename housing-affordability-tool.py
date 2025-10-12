@@ -17,13 +17,14 @@ class Paths:
 
 ROOT = Path(__file__).parent if "__file__" in globals() else Path.cwd()
 PATHS = Paths(root=ROOT, data=ROOT / "data", assumptions=ROOT / "data" / "assumptions.csv")
-DATA = PATHS.data
 ASSUMP = PATHS.assumptions
+DATA = PATHS.data
+VHFA = DATA / "vhfa data"
 
 REGIONS = {
-    "Chittenden": DATA / "chittenden_ami.csv",
-    "Addison":    DATA / "addison_ami.csv",
-    "Vermont":    DATA / "vermont_ami.csv",
+    "Chittenden": VHFA / "chittenden_ami.csv",
+    "Addison":    VHFA / "addison_ami.csv",
+    "Vermont":    VHFA / "vermont_ami.csv",
 }
 REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "Rest of Vermont"}
 PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
