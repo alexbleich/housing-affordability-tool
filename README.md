@@ -2,15 +2,12 @@
 
 *See how small policy choices move total development cost (TDC) and who can afford new homes in Vermont.*
 
-**Live app:** https://housing-affordability-tool.streamlit.app  
-**Auto-deploys:** Every commit to this repo rebuilds the Streamlit app.
-
----
+**Live app:** https://housing-affordability-tool.streamlit.app  \
 
 ## What it does
 
 - Lets you “build” a simple for-sale home (Townhome or Condo) by choosing:
-  - **Energy code**, **heating source**, **finish quality**, and **location** (new neighborhood toggle).
+  - **Energy code**, **heating source**, **finish quality**, and **location**.
 - Calculates **Total Development Cost (TDC)** from transparent inputs.
 - Converts price ↔ **required household income** using VHFA affordability tables.
 - Estimates the **share of VT households** able to afford that price.
@@ -18,17 +15,14 @@
 
 > *Note:* The apartment (rent) model is planned but not enabled yet.
 
----
-
 ## How to use it
 
 1. **Choose housing type** and **bedrooms**.  
-2. **Pick options** (energy code, heating, finish, location).  
+2. **Pick policy options** (energy code, heating, finish, location).  
 3. **Select region** and **household size**, then enter an **annual income**.  
 4. **View the chart** comparing TDC to affordable purchase price; read the short explainer.  
 5. Try additional options to compare what moves affordability most.
 
----
 ## Where the numbers come from
 
 - **Costs:** Combined from `assumptions.csv` into TDC (per-sf, per-unit, fixed).  
@@ -38,21 +32,10 @@
 
 *Edge cases (e.g., interpolation and carefully limited extrapolation) are documented in* **ASSUMPTIONS.md**.
 
----
-
-## Updating data
-
-- Edit `assumptions.csv` or AMI CSVs → **commit** → Streamlit auto-deploys.  
-- See **MAINTENANCE.md** for step-by-step refresh guidance.
-
----
-
 ## Intended use & limits
 
 This is a **policy discussion tool**, not a project pro-forma. It is **transparent and directional**. Figures may vary with data sources and versions—always consult **ASSUMPTIONS.md** for context.
 
----
-
 ## Feedback
 
-Questions or suggestions? Open a GitHub issue or leave comments in **ASSUMPTIONS.md**.
+Questions or suggestions? Reach out to Summit Properties.
