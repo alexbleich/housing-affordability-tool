@@ -1,10 +1,10 @@
 # ===== Imports & Paths =====
+from dataclasses import dataclass
 from pathlib import Path
+import re
 import numpy as np
 import pandas as pd
 import streamlit as st
-from dataclasses import dataclass
-import re
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
@@ -243,21 +243,48 @@ def compute_tdc(sf, htype, code, src, infra, fin):
     return total
 
 # ===== Price ↔ Income mapping =====
-def _best_buy_col_for_bed(df_cols, bed_n: int):
-    avail = sorted([int(m.group(1)) for c in df_cols if (m:=re.match(r"buy(\d+)$", c))], key=int)
-    if not avail: return None
-    le = [n for n in avail if n <= bed_n]
-    pick = (le[-1] if le else avail[0])
+def _buy_col_for_household(hh_size: int, df_cols) -> str | None:
+    """
+    Map household size → target buyN column and clamp to the nearest available buy column.
+    1→buy1, 2→buy2, 3–4→buy3, 5–6→buy4, 7–8→buy5.
+    """
+    if hh_size <= 1:
+        target = 1
+    elif hh_size == 2:
+        target = 2
+    elif hh_size in (3, 4):
+        target = 3
+    elif hh_size in (5, 6):
+        target = 4
+    else:
+        target = 5
+
+    avail = sorted(
+        int(m.group(1))
+        for c in (col.lower() for col in df_cols)
+        if (m := re.match(r"buy(\d+)$", c))
+    )
+    if not avail:
+        return None
+
+    if target <= avail[0]:
+        pick = avail[0]
+    elif target >= avail[-1]:
+        pick = avail[-1]
+    else:
+        pick = target if target in avail else min(avail, key=lambda n: abs(n - target))
+
     return f"buy{pick}"
 
 def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
     df = R[region_key]
     inc_col = f"income{hh_size}"
-    buy_col = _best_buy_col_for_bed(df.columns.str.lower(), int(bed_n))
+    buy_col = _buy_col_for_household(hh_size, df.columns)
     if buy_col is None or not {inc_col, buy_col}.issubset(df.columns.str.lower()):
         return None, None, None, None, None, None
     sub = df[[buy_col, inc_col]].apply(pd.to_numeric, errors="coerce").dropna().sort_values(buy_col)
-    if sub.empty: return None, None, None, None, None, None
+    if sub.empty:
+        return None, None, None, None, None, None
     x = sub[buy_col].to_numpy(dtype=float)
     y = sub[inc_col].to_numpy(dtype=float)
     xmin, xmax = x[0], x[-1]
@@ -272,6 +299,7 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
     def price_to_income(p):
         p_arr = np.asarray(p, dtype=float)
         out = np.empty_like(p_arr)
+        if out.size == 0: return out
         low  = p_arr <= xmin
         high = p_arr >= xmax
         mid  = ~(low | high)
@@ -282,6 +310,7 @@ def build_price_income_transformers(region_key: str, hh_size: int, bed_n: int):
     def income_to_price(i):
         i_arr = np.asarray(i, dtype=float)
         out = np.empty_like(i_arr)
+        if out.size == 0: return out
         low  = i_arr <= ymin
         high = i_arr >= ymax
         mid  = ~(low | high)
