@@ -1,67 +1,58 @@
-# 🏘️ Housing Affordability Visualizer 🏘️
+# 🏘️ Housing Affordability Visualizer
 
-This tool compares policy-driven differences in total development cost (TDC) for a single housing unit type and bedroom count against AMI-based affordability thresholds across Vermont regions.
+*See how small policy choices move total development cost (TDC) and who can afford new homes in Vermont.*
 
-It is designed to help visualize how **changes in policy directly impact housing affordability**.
-
-Access the tool here: https://housing-affordability-tool.streamlit.app
-
----
-
-## User Inputs
-- Housing product type: **Townhome**, **Condo**, or **Apartment**  
-  *(Apartment model is rent-based and coming soon; choose Townhome or Condo to run the for-sale model.)*
-- Number of bedrooms *(for Townhome/Condo)*
-- Number of units to compare (1–5)
-- For each unit:
-  - Policy package (**Baseline**, **Top-of-the-Line**, **Below Baseline**)
-  - Advanced overrides:
-    - Energy code standard
-    - Energy source
-    - Finish quality
-    - Optional custom bar label
-- Vermont region(s) for **Chart 1** thresholds: **Chittenden**, **Addison**, and/or **Rest of Vermont**
-- AMI level(s): choose up to 3 (30, 50–150% in 5% steps)
-- Household context for **Chart 2**:
-  - Region (single select)
-  - Household size (1–8)
-  - Household income (bounded to the AMI table for the selected region & size; **max is the 150% AMI income**)
+**Live app:** https://housing-affordability-tool.streamlit.app  
+**Auto-deploys:** Every commit to this repo rebuilds the Streamlit app.
 
 ---
 
-## What It Does
-- Calculates TDC per unit using:
-  - Baseline $/sf × (multifamily efficiency factor + policy % adders) × unit square footage
-  - Plus energy-source and infrastructure requirement $/sf adders  
-- Retrieves affordable **purchase price** thresholds by AMI and region
-- Builds an **invertible mapping between purchase price and household income** from the VHFA table so **both y-axes stay in sync** (with the top duplicate tick pruned)
+## What it does
+
+- Lets you “build” a simple for-sale home (Townhome or Condo) by choosing:
+  - **Energy code**, **heating source**, **finish quality**, and **location** (new neighborhood toggle).
+- Calculates **Total Development Cost (TDC)** from transparent inputs.
+- Converts price ↔ **required household income** using VHFA affordability tables.
+- Estimates the **share of VT households** able to afford that price.
+- Shows approximate **% of AMI** for the chosen region.
+
+> *Note:* The apartment (rent) model is planned but not enabled yet.
 
 ---
 
-## Output
-- **Chart 1 — “Do These Policy Choices Put Homes Within Reach?”**  
-  - **Bars:** TDC for each scenario  
-  - **Dashed lines:** Affordability thresholds for selected AMI levels & regions  
-  - **Dual Y-axis:** Left = TDC; Right = “% AMI + price” tick labels for the selected lines
-- **Chart 2 — “What These Costs Mean for Your Constituents”**  
-  - **Bars:** TDC for each scenario  
-  - **Green line:** Your chosen income mapped to its max affordable purchase price  
-  - **Dual Y-axis:** Left = TDC; Right = **required household income** for any TDC value (derived from the same VHFA table)
+## How to use it
 
-- **Affordability messaging** beneath Chart 2:
-  - Exact equality counts as affordable (small epsilon)  
-  - Clear states:
-    - **All options affordable** (shows headroom to the most expensive)
-    - **None affordable** (shows income needed for the cheapest and the shortfall)
-    - **Some affordable**:
-      - “Only the cheapest option is affordable” **or**
-      - “The lowest _N_ options are affordable” **or**
-      - Non-contiguous mix: lists the affordable options and the next shortfall
+1. **Choose housing type** and **bedrooms**.  
+2. **Pick options** (energy code, heating, finish, location).  
+3. **Select region** and **household size**, then enter an **annual income**.  
+4. **View the chart** comparing TDC to affordable purchase price; read the short explainer.  
+5. Try additional options to compare what moves affordability most.
+
+---
+## Where the numbers come from
+
+- **Costs:** Combined from `assumptions.csv` into TDC (per-sf, per-unit, fixed).  
+- **Price ↔ Income:** Interpolated from VHFA affordability tables by region & household size.  
+- **Household share:** Computed from `vt_inc_dist.csv` (est. # and % of VT households at/above required income).  
+- **AMI %:** Translates required income to AMI for the selected region.
+
+*Edge cases (e.g., interpolation and carefully limited extrapolation) are documented in* **ASSUMPTIONS.md**.
 
 ---
 
-## Files in This Repository
-- `data/assumptions.csv` — Policy cost assumptions (baseline $/sf, energy codes, energy sources, finish quality).  
-- `data/chittenden_ami.csv`, `data/addison_ami.csv`, `data/vermont_ami.csv` — VHFA purchase-price & income tables by AMI.  
-  *(The app caps at 150% AMI and constrains the income input to the table’s min–max for the selected region & household size.)*
-- `housing-affordability-tool.py` — Streamlit app
+## Updating data
+
+- Edit `assumptions.csv` or AMI CSVs → **commit** → Streamlit auto-deploys.  
+- See **MAINTENANCE.md** for step-by-step refresh guidance.
+
+---
+
+## Intended use & limits
+
+This is a **policy discussion tool**, not a project pro-forma. It is **transparent and directional**. Figures may vary with data sources and versions—always consult **ASSUMPTIONS.md** for context.
+
+---
+
+## Feedback
+
+Questions or suggestions? Open a GitHub issue or leave comments in **ASSUMPTIONS.md**.
