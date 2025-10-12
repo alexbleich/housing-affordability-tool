@@ -30,11 +30,6 @@ Each row in `assumptions.csv` has:
   - `fixed`   → a **flat** dollar amount
 - **value** — the numeric amount.
 
-**Normalization rules**:
-- Case/spacing/underscores don’t matter; the app lower-cases and trims.
-- Synonyms like `psf`, `sf`, `perunit`, `fixedcost`, etc., are normalized to the three types above.
-- Unknown or missing values are treated as zero for safety.
-
 ## Bedrooms and square footage
 
 - `category = bedrooms`, with `parent_option` = product (`townhome` or `condo`) and `option` = the bedroom count (`1`, `2`, `3`, `4`).
