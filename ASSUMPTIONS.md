@@ -2,7 +2,7 @@
 
 This page intends to provide a clear explanation of how inputs in `assumptions.csv` flow through the model, how prices map to income, and what simplifications are made. This is written for non-coders. If anything is ambiguous, please reach out to Summit Properties with your question(s).
 
-## What the model does (at a glance)
+## What the model does
 
 - You pick a **home type** (Townhome or Condo), **bedrooms**, and a few **build options** (energy code, heating source, finish quality, and whether it’s in a new neighborhood).
 - The app calculates a **Total Development Cost (TDC)** from transparent line items in `assumptions.csv`.
