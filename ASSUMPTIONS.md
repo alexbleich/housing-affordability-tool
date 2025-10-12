@@ -1,4 +1,4 @@
-# 🧮 ASSUMPTIONS
+# ASSUMPTIONS
 
 *Clear explanation of how inputs in `assumptions.csv` flow through the model, how prices map to income, and what simplifications we make. This is meant for policymakers and non-coders.*
 
