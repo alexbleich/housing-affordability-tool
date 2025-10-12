@@ -1,166 +1,136 @@
-🧾 ASSUMPTIONS.md
+# 🧮 ASSUMPTIONS
 
-This document explains how the app reads and uses values from the CSV files to compute total development cost (TDC), map prices to incomes, and estimate how many Vermont households could afford a given home. Everything below is implemented in the app and driven entirely by the CSVs—no hard-coded dollar amounts.
+*Clear explanation of how inputs in `assumptions.csv` flow through the model, how prices map to income, and what simplifications we make. This is meant for policymakers and non-coders.*
 
-Files used by the app
+## What the model does (at a glance)
 
-data/assumptions.csv – policy & cost inputs (see schema below)
+- You pick a **home type** (Townhome or Condo), **bedrooms**, and a few **build options** (energy code, heating source, finish quality, and whether it’s in a new neighborhood).
+- The app calculates a **Total Development Cost (TDC)** from transparent line items in `assumptions.csv`.
+- It turns the TDC into the **household income needed to buy** using VHFA affordability tables.
+- It estimates **what share of Vermont households** could afford that price and the approximate **% of AMI**.
 
-data/chittenden_ami.csv, data/addison_ami.csv, data/vermont_ami.csv – VHFA purchase-price & income by AMI and household size
+> *Apartments (rent) are planned but not enabled yet.*
 
-data/vt_inc_dist.csv – Vermont household income distribution (bin upper bound, number of households, percent of households)
+## Data sources used
 
-assumptions.csv schema
+- `data/assumptions.csv` — all cost inputs used to build up TDC.
+- `vhfa data/*_ami.csv` — VHFA affordability tables by region (Addison, Chittenden, “Rest of Vermont”).
+- `data/vt_inc_dist.csv` — statewide household income distribution (bins of income and # of households).
 
-Columns (lowercase):
+## CSV schema (how we read assumptions)
 
-category – cost/setting bucket (e.g., baseline_hard_cost, soft_cost, bedrooms, energy_code, energy_source, finish_quality, new_neighborhood, acq_cost)
+Each row in `assumptions.csv` has:
 
-parent_option – scope: usually the product type (townhome, condo) or default
+- **category** — e.g., `baseline_hard_cost`, `energy_code`, `finish_quality`, `energy_source`, `new_neighborhood`, `acq_cost`, `bedrooms`, and others.
+- **parent_option** — which product it applies to (`townhome`, `condo`, or `default`).
+- **option** — the selectable option name (e.g., `rbes`, `passive_house`, `average`, `yes`, `no`, or `default`).
+- **value_type** — one of:
+  - `per_sf`  → dollars **per square foot**
+  - `per_unit` → dollars **per unit**
+  - `fixed`   → a **flat** dollar amount
+- **value** — the numeric amount.
 
-option – the specific choice name (e.g., baseline, average, vt_energy_code, rbes, passive_house, yes, no, or bedroom counts like 2, 3, 4)
+**Normalization rules**:
+- Case/spacing/underscores don’t matter; the app lower-cases and trims.
+- Synonyms like `psf`, `sf`, `perunit`, `fixedcost`, etc., are normalized to the three types above.
+- Unknown or missing values are treated as zero for safety.
 
-value_type – one of:
+## Bedrooms and square footage
 
-per_sf (applies per square foot)
+- `category = bedrooms`, with `parent_option` = product (`townhome` or `condo`) and `option` = the bedroom count (`1`, `2`, `3`, `4`).
+- The **value** is the **assumed square footage** for that product/bed count.
+- If a bedroom row is missing, the app falls back to a simple default (e.g., 1,000 sf).
 
-per_unit (applies once per home)
+## TDC formula (how costs are built)
 
-fixed (applies once per home; does not scale with size or count)
+Let **sf** be the square footage for the chosen product + bedrooms. The **per-sf** and **per-unit** items come from `assumptions.csv`.
 
-value – numeric cost or percentage (blank/NaN hides an option in the UI)
+1) **Baseline hard cost per sf**
+- `baseline_hard_cost` (per-sf) × **multipliers**:
 
-Notes
+   - **Multi-family efficiency**: `mf_efficiency_factor`(product), default ≈ `1.0`.
+   - **Energy code** + **finish quality**: we read the option values as **percent adjustments**.  
+     If energy code is `+10%` and finish is `+5%`, together they add **+15%** to the base.
 
-All identifiers are read in lowercase and trimmed.
+   *Implementation:*  
+   `hard_psf = baseline_hard_psf * (mf_factor + (energy_code% + finish_quality%) / 100)`  
+   then **soft costs** are applied:
 
-If the same category has both a product-specific row (e.g., parent_option=townhome) and a parent_option=default row, the app adds them together where appropriate.
+2) **Soft costs**  
+- `soft_cost` is a **percent** added *on top* of the hard-cost subtotal:  
+  `hard_psf = hard_psf * (1 + soft_cost%/100)`
 
-Any additional categories with option=default act as silent “other defaults” and are included automatically.
+3) **Energy source, land/acquisition, other defaults**  
+- For categories `energy_source`, `acq_cost` (uses option `baseline`), and any other *defaulted* categories, we sum their:
+  - `per_sf` → added to the per-sf stack  
+  - `per_unit` → added as per-unit items  
+  - `fixed` → added once
 
-How each category is used
+4) **Infrastructure toggle (new neighborhood?)**  
+- `new_neighborhood` has options `yes`/`no` **per product** and contributes a **per-unit** amount when `yes`.
 
-baseline_hard_cost
+**Final TDC:**
+- `TDC = sf * (hard_psf + per_sf_adders) + (per_unit_adders + infra_per_unit) + fixed_adders`
 
-option=baseline, value_type=per_sf → baseline hard cost per square foot.
+Where:
+- *per_sf_adders* = energy source (`per_sf`) + acq (`per_sf`) + other defaults (`per_sf`)  
+- *per_unit_adders* = energy source (`per_unit`) + acq (`per_unit`) + other defaults (`per_unit`)  
+- *fixed_adders* = energy source (`fixed`) + acq (`fixed`) + other defaults (`fixed`)
 
-mf_efficiency_factor
+## Price ↔ Income mapping (VHFA tables)
 
-option=default, value_type=per_sf-like multiplier stored as a percentage adder (e.g., 1.00 means 100% of baseline).
+- Each `*_ami.csv` has an `ami` column and columns like `buy1`, `buy2`, … and `income1`, `income2`, …
+- We select the **buyN**/**incomeN** pair based on **household size**:
 
-May vary by product via parent_option.
+  | HH size | Buy column used |
+  |---------|------------------|
+  | 1       | `buy1`           |
+  | 2       | `buy2`           |
+  | 3–4     | `buy3`           |
+  | 5–6     | `buy4`           |
+  | 7–8     | `buy5`           |
 
-soft_cost
+  If a `buyN` isn’t present, we **clamp** to the nearest available (e.g., use `buy3`).
 
-option=baseline, percentage adder applied to the hard-cost subtotal only:
-hard_psf *= (1 + soft_cost%).
+- **Interpolation:** inside the range of the table, we **linearly interpolate** between points.
+- **Extrapolation (edge behavior):**
+  - Below the lowest price or above the highest price, we **extend the line** using the slope of the nearest segment.  
+    This keeps results reasonable just outside the table but should be interpreted with care.
 
-bedrooms
+## AMI percentage shown
 
-For each product (parent_option=townhome or condo), option is the bedroom count (1,2,3,4) and value is the square footage for that layout.
+- Given a **required income**, we look up the region’s `ami` vs. `incomeN` table.
+- We return:
+  - **30%** if below the lowest income point (capped low).
+  - **150%** if above the highest income point (capped high).
+  - Otherwise the **nearest AMI** for incomes ≤ the required income (rounded to a whole %).
 
-The app uses these to show only valid bedroom options (e.g., no 1-BR townhomes if absent in the CSV).
+## Share of VT households who could afford it
 
-energy_code (percent adders to hard cost)
+- `vt_inc_dist.csv` contains income bins for Vermont households (`lower`, `upper`, `num_hhs`).
+- We estimate **households at or above** the required income by:
+  - Summing all bins with `lower ≥ required_income`, plus
+  - A **partial** share of the bin that straddles the threshold, assuming **uniform distribution within the bin**.
+- We then report the **count** and the **percent of 270,000 households** (denominator can be changed in code if needed).
 
-Rows like vt_energy_code, rbes, passive_house with value as a percent adder.
+## Defaults & guardrails
 
-finish_quality (percent adder to hard cost)
+- **Default components** when you start: energy code = *VT energy code*, heating = *natural gas*, finish = *average*, location = *no (not a new neighborhood)*.
+- If a CSV is missing or a column is malformed, the app stops with a clear error message.
+- All numeric fields are coerced; any non-numeric values become zero (conservative).
 
-Rows like below_average, average, above_average with value as a percent adder.
+## What to keep in mind (limits)
 
-energy_source (overlays)
+- This is a **policy discussion tool**, not a project-level pro forma.
+- **Per-sf/per-unit/fixed** splits and **percent adders** should be reviewed periodically to reflect current market conditions.
+- **Extrapolation** beyond the VHFA table is linear and should be treated as approximate.
+- Household share uses a **statewide** income distribution; county-level distributions would change results.
 
-May include any combination of per_sf, per_unit, fixed rows.
+## Updating numbers
 
-Both parent_option=default and product-specific rows are summed.
+1. Edit `assumptions.csv` (costs, toggles, amounts).  
+2. Update AMI tables in `vhfa data/` if VHFA releases new versions.  
+3. Update `vt_inc_dist.csv` if newer statewide income distribution data are available.  
+4. Commit to GitHub — the Streamlit app redeploys automatically.
 
-new_neighborhood (toggle overlay)
-
-option=yes/no with typically per_unit values captured when the “In a new neighborhood” toggle is on.
-
-acq_cost (acquisition cost)
-
-Read from option=baseline (usually per_unit=18000).
-
-Added once per home; if present as per_sf or fixed, those are also included.
-
-Other default overlays
-
-Any other category with option=default is added automatically (per_sf + per_unit + fixed), for parent_option in {product, default}.
-
-TDC formula (per home)
-
-The app computes TDC using only values from assumptions.csv:
-
-hard_psf_before_soft = baseline_hard_psf * (mf_efficiency_factor + energy_code% + finish_quality%)
-hard_psf             = hard_psf_before_soft * (1 + soft_cost%)
-
-per_sf_overlays   = energy_source.per_sf + other_defaults.per_sf + acq_cost.per_sf
-per_unit_overlays = energy_source.per_unit + new_neighborhood.per_unit
-                    + other_defaults.per_unit + acq_cost.per_unit
-fixed_overlays    = energy_source.fixed + other_defaults.fixed + acq_cost.fixed
-
-TDC = sf * (hard_psf + per_sf_overlays) + per_unit_overlays + fixed_overlays
-
-
-sf comes from the bedrooms row for the chosen product & bedroom count.
-
-“Other defaults” = any additional category with option=default not listed above.
-
-Price ↔ Income mapping (by household size)
-
-From each region table (chittenden_ami.csv, addison_ami.csv, vermont_ami.csv) the app builds a two-way mapping between purchase price (buyN) and household income (incomeN).
-
-It selects the buy column by household size:
-
-1-person → buy1
-
-2-person → buy2
-
-3–4-person → buy3
-
-5–6-person → buy4
-
-7–8-person → buy5
-
-Within the table range, the mapping is linear interpolation between the two surrounding rows.
-
-Outside the table range, the mapping uses linear extrapolation using the slope of the nearest segment.
-
-The app caps AMI displays at 30% (as “at least”) and 150% (as “over 150%”).
-
-Income distribution method (who can afford it?)
-
-data/vt_inc_dist.csv has upper bounds of income bins (hh_income), household counts (num_hhs), and percent of households (percent_hhs).
-
-To estimate how many households can afford a required income X:
-
-Full bins above X are counted completely.
-
-For the bin that straddles X, the app adds a linear fraction of the bin:
-fraction = (upper - X) / (upper - lower).
-
-Sum that total and express it as N households and % of 270,000.
-
-This produces smooth counts/percentages when X falls inside a bin (e.g., at $80k within the $75–$100k bin, roughly 80% of that bin is counted).
-
-Bedroom choices vs. income mapping
-
-Bedroom choice only affects square footage (and thus the TDC bars).
-
-Required income comes from the household-size mapping above (not from bedrooms), which matches how mortgage underwriting and VHFA tables are structured.
-
-Updating assumptions
-
-To add/remove bedroom options, edit the bedrooms rows for each product.
-
-To enable new toggles later, add a category with option=default rows so the app includes it silently now; add UI controls in a future commit.
-
-To change acquisition policy, update acq_cost rows; the app reads them automatically.
-
-Data provenance
-
-VHFA affordability data (purchase price & income by AMI and household size) comes from the linked PDFs/tables referenced in the app.
-
-Vermont household income distribution is adapted to bins with upper bounds + counts + percents to support linear interpolation.
+*If you change column names or add new categories/options, reflect them in `assumptions.csv` and keep the value types to `per_sf`, `per_unit`, or `fixed`.*
