@@ -2,7 +2,7 @@
 
 *See how small policy choices move total development cost (TDC) and who can afford new homes in Vermont.*
 
-**Live app:** https://housing-affordability-tool.streamlit.app  \
+**Live app:** https://housing-affordability-tool.streamlit.app
 
 ## What it does
 
