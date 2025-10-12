@@ -29,13 +29,6 @@ REGIONS = {
 REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "Rest of Vermont"}
 PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 
-# Visible diagnostics (optional)
-with st.expander("🔎 Data path diagnostics", expanded=False):
-    st.write(f"ASSUMP: {ASSUMP.resolve()}  |  exists={ASSUMP.exists()}")
-    from pathlib import Path
-    for name, p in REGIONS.items():
-        st.write(f"{name}: {Path(p).resolve()}  |  exists={Path(p).exists()}")
-
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
 AFFORD_EPS = 0.5
