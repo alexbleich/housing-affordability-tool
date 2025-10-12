@@ -30,11 +30,11 @@
 - **Household share:** Computed from `vt_inc_dist.csv` (est. # and % of VT households at/above required income).  
 - **AMI %:** Translates required income to AMI for the selected region.
 
-*Edge cases (e.g., interpolation and carefully limited extrapolation) are documented in* `ASSUMPTIONS.md`.
+*Edge cases (e.g., interpolation and carefully limited extrapolation) are documented in* `ASSUMPTIONS.md`
 
 ## Intended use & limits
 
-This is a **policy discussion tool**, not a project pro-forma. It is **transparent and directional**. Figures may vary with data sources and versions—always consult **ASSUMPTIONS.md** for context.
+This is a **policy discussion tool**, not a project pro-forma. It is **transparent and directional**. Figures may vary with data sources and versions—always consult `ASSUMPTIONS.md` for context.
 
 ## Feedback
 
