@@ -1,4 +1,4 @@
-# 🏘️ Housing Affordability Visualizer
+# Housing Affordability Visualizer
 
 *See how small policy choices move total development cost (TDC) and who can afford new homes in Vermont.*
 
