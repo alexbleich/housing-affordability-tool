@@ -16,14 +16,16 @@ class Paths:
     assumptions: Path
 
 ROOT = Path(__file__).parent if "__file__" in globals() else Path.cwd()
-PATHS = Paths(root=ROOT, data=ROOT / "data", assumptions=ROOT / "data" / "assumptions.csv")
-DATA = PATHS.data
-ASSUMP = PATHS.assumptions
+DATA = ROOT / "data"
+VHFA = ROOT / "vhfa_data"
+
+ASSUMP = DATA / "assumptions.csv"
+INCOME_DIST = DATA / "vt_inc_dist.csv"
 
 REGIONS = {
-    "Chittenden": DATA / "chittenden_ami.csv",
-    "Addison":    DATA / "addison_ami.csv",
-    "Vermont":    DATA / "vermont_ami.csv",
+    "Chittenden": VHFA / "chittenden_ami.csv",
+    "Addison":    VHFA / "addison_ami.csv",
+    "Vermont":    VHFA / "vermont_ami.csv",
 }
 REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "Rest of Vermont"}
 PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
@@ -35,30 +37,59 @@ AFFORD_EPS = 0.5
 ENERGY_CODE_ORDER = ["vt_energy_code", "rbes", "passive_house"]
 DEFAULT_COMPONENTS = dict(code="vt_energy_code", src="natural_gas", infra="no", fin="average")
 
+# ===== Validation helpers (used by loaders) =====
+def _require_cols(df, required: set[str], where: str):
+    missing = required - set(df.columns)
+    if missing:
+        with st.expander(f"Details: {where} is missing columns", expanded=True):
+            st.write("Have:", sorted(df.columns))
+            st.write("Missing:", sorted(missing))
+        st.error(f"{where}: missing required columns: {', '.join(sorted(missing))}")
+        st.stop()
+
+def _require_allowed_values(df, col: str, allowed: set[str], where: str):
+    bad = set(df[col]) - allowed
+    if bad:
+        st.error(f"{where}: unexpected values in '{col}': {', '.join(sorted(bad))}. "
+                 f"Allowed: {', '.join(sorted(allowed))}")
+        st.dataframe(df[df[col].isin(bad)].head(20))
+        st.stop()
+
+def _require_no_nulls(df, cols: list[str], where: str):
+    nul = {c: int(df[c].isna().sum()) for c in cols if c in df.columns and df[c].isna().any()}
+    if nul:
+        st.error(f"{where}: nulls found in key columns: {nul}")
+        st.dataframe(df[df[cols].isna().any(axis=1)].head(20))
+        st.stop()
+
 # ===== Data Loading =====
-@st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: str(p)})
+@st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: (str(p), p.stat().st_mtime)})
 def load_assumptions(p: Path) -> pd.DataFrame:
     if not p.exists():
         st.error(f"Missing assumptions file: {p}"); st.stop()
     df = pd.read_csv(p)
     df.columns = df.columns.str.strip().str.lower()
-    required = {"category","parent_option","option","value_type","value"}
-    missing = required - set(df.columns)
-    if missing:
-        st.error(f"Assumptions CSV missing columns: {missing}"); st.stop()
+
+    _require_cols(df, {"category","parent_option","option","value_type","value"}, "assumptions.csv")
     for c in ("category","parent_option","option","value_type"):
         df[c] = df[c].astype(str).str.strip().str.lower()
+
     def _norm_vtype(s: str) -> str:
         t = s.replace("_","").replace("-","").replace(" ","")
         if t in {"persf","psf","sf"}: return "per_sf"
-        if t in {"perunit"}:         return "per_unit"
+        if t in {"perunit"}:          return "per_unit"
         if t in {"fixed","flat","lump","fixedcost"}: return "fixed"
         return s
     df["value_type"] = df["value_type"].map(_norm_vtype)
+    allowed_vtypes = {"per_sf","per_unit","fixed"}
+    _require_allowed_values(df, "value_type", allowed_vtypes, "assumptions.csv")
+
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
+    _require_no_nulls(df, ["value","category","option","value_type"], "assumptions.csv")
+
     return df
 
-@st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: str(p)})
+@st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: (str(p), p.stat().st_mtime)})
 def load_regions(files: dict[str, Path]) -> dict[str, pd.DataFrame]:
     out = {}
     for name, p in files.items():
@@ -66,31 +97,53 @@ def load_regions(files: dict[str, Path]) -> dict[str, pd.DataFrame]:
             st.error(f"Missing region file for {name}: {p}"); st.stop()
         d = pd.read_csv(p)
         d.columns = d.columns.str.strip().str.lower()
-        if AMI_COL not in d.columns:
-            st.error(f"Region file {name} missing '{AMI_COL}' column."); st.stop()
-        d[AMI_COL] = pd.to_numeric(d[AMI_COL], errors="coerce")
-        for col in d.columns:
-            if re.match(r"(buy|rent|income)\d+$", col):
-                d[col] = pd.to_numeric(d[col], errors="coerce")
+        _require_cols(d, {"ami"}, f"{p.name}")
+
+        buy_cols    = sorted([c for c in d.columns if re.fullmatch(r"buy\d+", c)])
+        income_cols = sorted([c for c in d.columns if re.fullmatch(r"income\d+", c)])
+        if not buy_cols or not income_cols:
+            st.error(f"{p.name}: expected columns like buy1/buy2 and income1/income2.")
+            st.write("Found buys:", buy_cols, "incomes:", income_cols); st.stop()
+
+        d["ami"] = pd.to_numeric(d["ami"], errors="coerce")
+        for c in buy_cols + income_cols:
+            d[c] = pd.to_numeric(d[c], errors="coerce")
+
+        _require_no_nulls(d, ["ami"] + buy_cols + income_cols, p.name)
+
+        first_buy = buy_cols[0]
+        if (d[first_buy].diff().dropna() < 0).any():
+            st.error(f"{p.name}: '{first_buy}' should be non-decreasing (price ladder).")
+            st.dataframe(d[[first_buy]].head(20)); st.stop()
+
         out[name] = d
     return out
 
-@st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: str(p)})
+@st.cache_data(show_spinner=False, hash_funcs={Path: lambda p: (str(p), p.stat().st_mtime)})
 def _load_vt_income_dist(p: Path) -> pd.DataFrame:
+    if not p.exists():
+        st.error(f"Missing income distribution file: {p}"); st.stop()
     df = pd.read_csv(p)
     df.columns = df.columns.str.strip().str.lower()
-    df["hh_income"]   = pd.to_numeric(df.get("hh_income"),   errors="coerce")
-    df["num_hhs"]     = pd.to_numeric(df.get("num_hhs"),     errors="coerce")
+    _require_cols(df, {"hh_income","num_hhs"}, "vt_inc_dist.csv")
+
+    df["hh_income"]   = pd.to_numeric(df["hh_income"], errors="coerce")
+    df["num_hhs"]     = pd.to_numeric(df["num_hhs"], errors="coerce")
     df["percent_hhs"] = pd.to_numeric(df.get("percent_hhs"), errors="coerce")
+
     df = df.dropna(subset=["hh_income","num_hhs"]).sort_values("hh_income").reset_index(drop=True)
 
-    lowers = [0.0]
-    for i in range(1, len(df)):
-        lowers.append(float(df.loc[i-1, "hh_income"]))
+    lowers = [0.0] + df["hh_income"].tolist()[:-1]
     df["lower"] = pd.Series(lowers, index=df.index).astype(float)
     df["upper"] = df["hh_income"].astype(float)
     if (df["upper"] <= df["lower"]).any():
-        st.error("Income distribution bins have non-positive width; check vt_inc_dist.csv"); st.stop()
+        bad = df.loc[df["upper"] <= df["lower"], ["lower","upper","num_hhs"]].head(20)
+        st.error("Income distribution bins have non-positive width; check vt_inc_dist.csv")
+        st.dataframe(bad); st.stop()
+
+    if (df["lower"].shift(-1).fillna(df["upper"].iloc[-1]) - df["upper"]).gt(0).any():
+        st.warning("Income bins have gaps; share calculations will assume zero households in gaps.")
+
     return df[["lower","upper","num_hhs","percent_hhs"]]
 
 def households_share_at_or_above(
