@@ -19,7 +19,7 @@ ROOT = Path(__file__).parent if "__file__" in globals() else Path.cwd()
 PATHS = Paths(root=ROOT, data=ROOT / "data", assumptions=ROOT / "data" / "assumptions.csv")
 ASSUMP = PATHS.assumptions
 DATA = PATHS.data
-VHFA = DATA / "vhfa data"
+VHFA = DATA / "vhfa_data"
 
 REGIONS = {
     "Chittenden": VHFA / "chittenden_ami.csv",
