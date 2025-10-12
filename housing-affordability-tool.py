@@ -350,7 +350,7 @@ def _ami_line_for_region(pct: int | None, region_label: str, capped_low: bool, c
     if pct is None:
         return f"—% of Area Median Income in {region_label}{' County' if is_county else ''}."
     if capped_high:
-        return "More than 150% of Area Median Income in the rest of Vermont." if region_label == "Rest of Vermont" else f"More than 150% of Area Median Income in {region_label}{' County' if is_county else ''}."
+        return "Over 150% of Area Median Income in the rest of Vermont." if region_label == "Rest of Vermont" else f"Over 150% of Area Median Income in {region_label}{' County' if is_county else ''}."
     suffix = " (at least)" if capped_low else ""
     return f"{pct}% of Area Median Income in the rest of Vermont{suffix}." if region_label == "Rest of Vermont" else f"{pct}% of Area Median Income in {region_label}{' County' if is_county else ''}{suffix}."
 
