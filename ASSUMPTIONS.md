@@ -1,6 +1,6 @@
 # Assumptions
 
-This page is intends to provide a clear explanation of how inputs in `assumptions.csv` flow through the model, how prices map to income, and what simplifications we make. This is meant for policymakers and non-coders.
+This page intends to provide a clear explanation of how inputs in `assumptions.csv` flow through the model, how prices map to income, and what simplifications are made. This is written for non-coders. If anything is ambiguous, please reach out to Summit Properties.
 
 ## What the model does (at a glance)
 
