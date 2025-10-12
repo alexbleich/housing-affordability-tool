@@ -29,6 +29,9 @@ REGIONS = {
 REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "Rest of Vermont"}
 PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 
+for name, p in REGIONS.items():
+    assert p.exists(), f"{name} AMI file not found at {p}"
+
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
 AFFORD_EPS = 0.5
