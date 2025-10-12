@@ -9,20 +9,21 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 # ===== Paths, files, constants =====
-from pathlib import Path
+@dataclass(frozen=True)
+class Paths:
+    root: Path
+    data: Path
+    assumptions: Path
 
 ROOT = Path(__file__).parent if "__file__" in globals() else Path.cwd()
-
-DATA = ROOT / "data"
-VHFA = ROOT / "data" / "vhfa_data"
-
-ASSUMP = ROOT / "assumptions.csv"
-INCOME_DIST = ROOT / "vt_inc_dist.csv"
+PATHS = Paths(root=ROOT, data=ROOT / "data", assumptions=ROOT / "data" / "assumptions.csv")
+DATA = PATHS.data
+ASSUMP = PATHS.assumptions
 
 REGIONS = {
-    "Chittenden": VHFA / "chittenden_ami.csv",
-    "Addison":    VHFA / "addison_ami.csv",
-    "Vermont":    VHFA / "vermont_ami.csv",
+    "Chittenden": DATA / "chittenden_ami.csv",
+    "Addison":    DATA / "addison_ami.csv",
+    "Vermont":    DATA / "vermont_ami.csv",
 }
 REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "Rest of Vermont"}
 PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
@@ -666,3 +667,4 @@ if show_results:
 
     else:
         st.info("Select Townhome or Condo to run the for-sale model. Apartment model (rent) coming soon.")
+        
