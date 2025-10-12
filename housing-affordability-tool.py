@@ -9,18 +9,15 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 # ===== Paths, files, constants =====
-@dataclass(frozen=True)
-class Paths:
-    root: Path
-    data: Path
-    assumptions: Path
+from pathlib import Path
 
 ROOT = Path(__file__).parent if "__file__" in globals() else Path.cwd()
-DATA = ROOT / "data"
-VHFA = ROOT / "vhfa_data"
 
-ASSUMP = DATA / "assumptions.csv"
-INCOME_DIST = DATA / "vt_inc_dist.csv"
+DATA = ROOT / "data"
+VHFA = ROOT / "data" / "vhfa_data"
+
+ASSUMP = ROOT / "assumptions.csv"
+INCOME_DIST = ROOT / "vt_inc_dist.csv"
 
 REGIONS = {
     "Chittenden": VHFA / "chittenden_ami.csv",
