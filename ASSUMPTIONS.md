@@ -60,10 +60,10 @@ Let:
      - Multi-family factor (`mf_efficiency_factor`) is a multiplier.
      - `energy_code` (%) + `finish_quality` (%) are **adders**.
    - Formula:
-   -   hard_psf_before_soft = baseline_hard_psf * ( mf_factor + (energy_code_pct + finish_quality_pct)/100 )
+     - hard_psf_before_soft = baseline_hard_psf * ( mf_factor + (energy_code_pct + finish_quality_pct)/100 )
 
 2. **Apply soft costs (per sf)**
-   -   hard_psf = hard_psf_before_soft * (1 + soft_cost_pct/100)
+     - hard_psf = hard_psf_before_soft * (1 + soft_cost_pct/100)
 
 3. **Add other components**
 - For categories with `default` or the selected options (`energy_source`, `acq_cost`, and any other defaults), we sum their **per_sf**, **per_unit**, and **fixed** values:
