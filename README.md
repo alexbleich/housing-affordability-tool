@@ -1,4 +1,4 @@
-# README - Information About the Housing Affordability Visualizer
+# READ ME - Information About the Housing Affordability Visualizer
 
 *A simple web tool showing how policy choices change total development cost (TDC) and who can afford new homes in Vermont.*
 
