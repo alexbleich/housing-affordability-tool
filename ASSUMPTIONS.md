@@ -75,8 +75,8 @@ Let:
 - Category: `new_neighborhood` with options `yes`/`no` (by product).
 - Contributes a **per-unit** amount when `yes`.
 
-**Final TDC**
-     - TDC = sf * ( hard_psf + per_sf_adders ) + ( per_unit_adders + infra_per_unit ) + fixed_adders
+**Final TDC:**
+- TDC = sf * ( hard_psf + per_sf_adders ) + ( per_unit_adders + infra_per_unit ) + fixed_adders
 
 > **Sign convention:** percent adders may be positive or negative (e.g., rebates). Use care when entering values in `assumptions.csv`.
 
