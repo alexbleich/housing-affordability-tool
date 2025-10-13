@@ -7,47 +7,41 @@
 ### 1.1 `data/assumptions.csv`
 Each row defines an input the model can use.
 
-- **category** — e.g., `baseline_hard_cost`, `soft_cost`, `mf_efficiency_factor`, `energy_code`, `finish_quality`, `energy_source`, `acq_cost`, `new_neighborhood`, `bedrooms`, etc.
-- **parent_option** — which product it applies to: `townhome`, `condo`, or `default`.
+- **category** — e.g., `baseline_hard_cost`, `soft_cost`, `bedrooms`, `energy_code`, `finish_quality`, etc.
+- **parent_option** — which product it applies to: `townhome`, `condo`, `apartment`, or `default`.
 - **option** — the setting within a category (e.g., `rbes`, `passive_house`, `average`, `yes`, `no`, `default`, or a bedroom count like `2`).
 - **value_type** — one of:
   - `per_sf`   → dollars **per square foot**
   - `per_unit` → dollars **per unit**
   - `fixed`    → dollars added **once** per comparison
+  - `percent`  → **percent added** to TDC
 - **value** — numeric amount.
 
 **Normalization & validation**
-- Text is lower-cased and trimmed; `psf`, `sf`, `perunit`, `fixedcost` are normalized to the three value types above.
-- Non-numeric values in `value` are treated as `0` (conservative).
+- Text is lower-cased and trimmed; `psf`, `sf`, `perunit`, `fixedcost` are used in the program and refer to the three value types above.
 - Missing required columns stop the app with a clear error message.
 
 ### 1.2 `vhfa data/*.csv` (Addison, Chittenden, Rest of Vermont)
 Affordability tables by region. Expected columns:
 
-- `ami` — AMI fraction (e.g., 0.30, 0.50, …, 1.50).  
+- `ami` — % AMI (e.g., 0.30 = 30%, 0.50 = 50%, …, 1.50 = 150%).  
 - `buy1`, `buy2`, … — affordable purchase price by household size.
 - `income1`, `income2`, … — corresponding household incomes.
-
-> We use the **buyN/incomeN** pair that matches the selected **household size**, clamping to the nearest available if an exact match is missing.
+> The program clamps to the nearest available income by household size to determine AMI level if an exact match is missing.
 
 ### 1.3 `data/vt_inc_dist.csv`
 Statewide household income distribution. Expected columns:
 
-- `lower`, `upper` — edges of income bins (USD per year).
+- `hh_income` — upper bound of income bins (e.g., if a bin is $10k-$15k, '15000' is the entry).
 - `num_hhs` — estimated number of households in the bin.
-- (Optional) `percent_hhs` — not required by the model but allowed.
-
-**Validation**
-- Bins must have **positive width** (`upper > lower`).  
-- Non-numeric rows are dropped.
+- `percent_hhs` — estimated percent of households in the bin.
+> Bins must have **positive width** (`upper > lower`).
 
 ## 2) Bedrooms → Square Footage
 - Category: `bedrooms`
 - `parent_option`: `townhome` or `condo`
-- `option`: the bedroom count (`1`, `2`, `3`, `4`, ...)
+- `option`: the bedroom count (`1`, `2`, `3`, `4`)
 - `value`: **assumed square footage** for that product/bed count.
-
-*If a bedroom row is not found, the app uses a sensible fallback (e.g., ~1,000 sf) and flags this in the code for future data completion.*
 
 ## 3) Cost Model — From Line Items to Total Development Cost (TDC)
 
@@ -74,9 +68,6 @@ Let:
 2. **Apply soft costs (per sf)**
 hard_psf = hard_psf_before_soft * (1 + soft_cost_pct/100)
 
-markdown
-Copy code
-
 3. **Add other components**
 - For categories with `default` or the selected options (`energy_source`, `acq_cost`, and any other defaults), we sum their **per_sf**, **per_unit**, and **fixed** values:
   - `per_sf_adders`  = sum of all relevant per-sf items
@@ -91,9 +82,6 @@ Copy code
 TDC = sf * ( hard_psf + per_sf_adders )
 + ( per_unit_adders + infra_per_unit )
 + fixed_adders
-
-markdown
-Copy code
 
 > **Sign convention:** percent adders may be positive or negative (e.g., rebates). Use care when entering values in `assumptions.csv`.
 
