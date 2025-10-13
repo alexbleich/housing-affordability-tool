@@ -6,9 +6,9 @@
 
 ## How to use
 1. Choose **home type** (Townhome or Condo) and **bedrooms**.
+2. Pick **energy code**, **heating**, **finish quality**, and **new neighborhood** (yes/no).  
+3. Select **region** and **household size**, enter **annual income**, then view results.
 > *Apartment (rent) model is planned; not enabled yet.*
-3. Pick **energy code**, **heating**, **finish quality**, and **new neighborhood** (yes/no).  
-4. Select **region** and **household size**, enter **annual income**, then view results.
 
 ## What you’ll see
 - **Bars** = Total Development Cost (TDC) for your selections.  
