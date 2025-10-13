@@ -65,7 +65,7 @@ Let:
 2. **Apply soft costs (per sf)**
      - hard_psf = hard_psf_before_soft * (1 + soft_cost_pct/100)
 
-3. **Add other components**
+4. **Add other components**
 - For categories with `default` or the selected options (`energy_source`, `acq_cost`, and any other defaults), we sum their **per_sf**, **per_unit**, and **fixed** values:
   - `per_sf_adders`  = sum of all relevant per-sf items
   - `per_unit_adders` = sum of all relevant per-unit items
@@ -76,9 +76,7 @@ Let:
 - Contributes a **per-unit** amount when `yes`.
 
 **Final TDC**
-TDC = sf * ( hard_psf + per_sf_adders )
-+ ( per_unit_adders + infra_per_unit )
-+ fixed_adders
+     - TDC = sf * ( hard_psf + per_sf_adders ) + ( per_unit_adders + infra_per_unit ) + fixed_adders
 
 > **Sign convention:** percent adders may be positive or negative (e.g., rebates). Use care when entering values in `assumptions.csv`.
 
