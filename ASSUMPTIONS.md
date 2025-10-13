@@ -1,4 +1,4 @@
-# Assumptions, Methods, Data Schema, and Guardrails
+# Assumptions, Methods, & Data Schema
 
 This is a technical appendix for the Housing Affordability Visualizer *written for non-coders who want transparency*. This document explains how inputs are read, how costs are combined, how price maps to income, and what safeguards and caveats apply.
 
