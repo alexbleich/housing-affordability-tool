@@ -18,7 +18,7 @@ Each row defines an input the model can use.
 - **value** — numeric amount.
 
 **Normalization & validation**
-- Text is lower-cased and trimmed; `psf`, `sf`, `perunit`, `fixedcost` are used in the program and refer to the three value types above.
+- Text is lower-cased and trimmed; `psf`, `sf`, `perunit`, `fixedcost` are used in the program and refer to the value types above.
 - Missing required columns stop the app with a clear error message.
 
 ### 1.2 `vhfa data/*.csv` (Addison, Chittenden, Rest of Vermont)
