@@ -648,7 +648,7 @@ if show_results:
                 st.write("")
 
             st.subheader("Want to try again?")
-            st.write("Build another home (or two!) and use the graph to compare with your first attempt. "
+            st.write("Build another home (or two) and use the graph to compare with your first attempt. "
                 "To tweak your first home and/or build your new one(s), *return to Step 2*."
             )
 
