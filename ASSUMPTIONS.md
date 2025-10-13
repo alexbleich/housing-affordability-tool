@@ -89,8 +89,6 @@ Let:
 - 5–6 → `buy4`/`income4`
 - 7–8 → `buy5`/`income5`
 
-If an exact `buyN` column is missing, we **clamp** to the nearest available column.
-
 **Interpolation (inside the table)**
 - We **linearly interpolate** between tabulated points to convert:
   - **price → income** (*price_to_income*),
