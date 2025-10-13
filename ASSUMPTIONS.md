@@ -8,7 +8,7 @@ This is a technical appendix for the Housing Affordability Visualizer *written f
 Each row defines an input the model can use.
 
 - **category** — e.g., `baseline_hard_cost`, `soft_cost`, `bedrooms`, `energy_code`, `finish_quality`, etc.
-- **parent_option** — which product it applies to: `townhome`, `condo`, `apartment`, or `default`.
+- **parent_option** — which product it applies to: `townhome`, `condo`, or `default`.
 - **option** — the setting within a category (e.g., `rbes`, `passive_house`, `average`, `yes`, `no`, `default`, or a bedroom count like `2`).
 - **value_type** — one of:
   - `per_sf`   → dollars **per square foot**
