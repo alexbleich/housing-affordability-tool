@@ -480,7 +480,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
 st.title("Housing Affordability Visualizer")
 st.write("This tool allows you to see how housing policy directly impacts whether Vermonters at various income levels are able to afford housing.")
 st.write("“Build” one type of housing or compare multiple. Can you afford new construction in Vermont?")
-st.write("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool)  |  [VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
+st.write("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool/blob/main/README.md)  |  [VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 st.divider()
 
 # ===== Step 1 – Choose the Housing Type =====
