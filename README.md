@@ -1,4 +1,4 @@
-# Housing Affordability Visualizer: The Basics
+# Vermont Housing Affordability Visualizer: The Basics
 
 *A simple web tool showing how policy choices change total development cost (TDC) and who can afford new homes in Vermont.*
 
