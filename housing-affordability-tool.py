@@ -671,7 +671,7 @@ if show_results:
 
             st.subheader("Want to try again?")
             st.write("To tweak your home, *return to Step 2*, adjust the choices, and use the chart to see how affordability shifts.")
-            st.write("You can also use the buttons below to add up to two more homes—edit them in Step 2, "
+            st.write("You can also use the buttons below to add up to two more homes — edit them in Step 2, "
                 " and they’ll appear on the graph for side-by-side comparison."  
             )
 
