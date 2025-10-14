@@ -677,7 +677,7 @@ if show_results:
             if "num_units" not in st.session_state:
                 st.session_state.num_units = 1
             prev_units = int(st.session_state.num_units)
-            compare_choice = st.radio("**How many homes do you want to "build"?**",
+            compare_choice = st.radio("**How many homes do you want to 'build'?**",
                                       [1, 2, 3],
                                       index={1:0, 2:1, 3:2}[prev_units],
                                       horizontal=True,
