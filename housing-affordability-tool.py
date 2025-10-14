@@ -392,11 +392,11 @@ def draw_chart(labels, tdc_vals, afford_price, price_to_income, income_to_price)
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.025)
     if afford_price is not None and np.isfinite(afford_price):
         ax.axhline(y=float(afford_price), linestyle="-", linewidth=2.8, color="#2E7D32",
-                   label="Income level mapped to affordable purchase price")
+                   label="Income level you entered")
     ax.set_ylim(0, ymax)
     ax.set_ylabel("Total Development Cost (TDC)")
     ax.set_xlabel("")
-    ax.set_title("Purchase Ability by Income and Household Size")
+    ax.set_title("Development Cost Compared to Household Income")
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: fmt_money(x)))
     if price_to_income is not None and income_to_price is not None:
         sec = ax.secondary_yaxis('right', functions=(price_to_income, income_to_price))
@@ -500,7 +500,7 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
 # ===== Header =====
 st.title("Vermont Housing Affordability Visualizer")
 st.write("This tool allows you to see how housing policy directly impacts whether Vermonters at various income levels are able to afford housing.")
-st.write("“Build” one type of housing or compare multiple. Can you afford new construction in Vermont?")
+st.write("“Build” one type of housing and then compare multiple units. Can you afford new construction in Vermont?")
 st.write("[View all assumptions and code here](https://github.com/alexbleich/housing-affordability-tool/blob/main/README.md)  |  [VHFA Affordability Data](https://housingdata.org/documents/Purchase-price-and-rent-affordability-expanded.pdf)")
 st.divider()
 
@@ -669,14 +669,15 @@ if show_results:
                 st.write("")
 
             st.subheader("Want to try again?")
-            st.write("Build another home (or two) and use the graph to compare with your first attempt. "
-                "To tweak your first home and/or build your new one(s), *return to Step 2*."
+            st.write("To tweak your home, *return to Step 2*, adjust the choices, and use the chart to see how affordability shifts.")
+            st.write("You can also use the buttons below to add up to two more homes—edit them in Step 2, "
+                " and they’ll appear on the graph for side-by-side comparison."  
             )
 
             if "num_units" not in st.session_state:
                 st.session_state.num_units = 1
             prev_units = int(st.session_state.num_units)
-            compare_choice = st.radio("**How many homes do you want to build?**",
+            compare_choice = st.radio("**How many homes do you want to "build"?**",
                                       [1, 2, 3],
                                       index={1:0, 2:1, 3:2}[prev_units],
                                       horizontal=True,
