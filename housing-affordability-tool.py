@@ -8,7 +8,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
-# ===== Tab title =====
+# ===== Tab title, icon, page layout =====
 st.set_page_config(
     page_title="VT Housing Aff. Visualizer",
     page_icon="🏘️",
