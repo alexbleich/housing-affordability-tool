@@ -405,7 +405,13 @@ def draw_chart(labels, tdc_vals, afford_price, price_to_income, income_to_price)
         sec.yaxis.set_major_locator(MaxNLocator(prune='upper'))
     else:
         sec = ax.twinx(); sec.set_yticks([]); sec.set_ylabel("Income Req. to Purchase")
-    ax.legend(loc="upper right", frameon=True)
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(
+            [handles[labels.index("Total Development Cost (TDC)")],
+             handles[labels.index("Income level you entered")]],
+            ["Total Development Cost (TDC)", "Income level you entered"],
+            loc="upper right", frameon=True
+        )
     plt.xticks(rotation=0)
     fig.tight_layout()
     st.pyplot(fig)
