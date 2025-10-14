@@ -4,6 +4,8 @@
 
 **Live app:** https://housing-affordability-tool.streamlit.app
 
+> *Works best on Google Chrome and Microsoft Edge.*
+
 ## How to use
 1. Choose **home type** (Townhome or Condo) and **bedrooms**.
 2. Pick **energy code**, **heating**, **finish quality**, and **new neighborhood** (yes/no).  
