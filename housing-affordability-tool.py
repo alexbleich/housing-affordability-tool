@@ -15,6 +15,20 @@ st.set_page_config(
     layout="wide"
 )
 
+st.markdown(
+    """
+    <style>
+        .block-container {
+            max-width: 1050px;   /* tweak width to taste */
+            padding-top: 1.5rem;
+            padding-bottom: 1.5rem;
+            margin: 0 auto;      /* centers the main column */
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ===== Paths, files, constants =====
 @dataclass(frozen=True)
 class Paths:
