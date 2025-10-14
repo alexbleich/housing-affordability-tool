@@ -8,6 +8,13 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 
+# ===== Tab title =====
+st.set_page_config(
+    page_title="Housing Affordability Visualizer",
+    page_icon="🏘️",
+    layout="wide"
+)
+
 # ===== Paths, files, constants =====
 @dataclass(frozen=True)
 class Paths:
