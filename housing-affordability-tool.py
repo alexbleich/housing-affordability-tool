@@ -12,7 +12,6 @@ from matplotlib.ticker import FuncFormatter, MaxNLocator
 st.set_page_config(
     page_title="Housing Affordability Visualizer",
     page_icon="🏘️",
-    layout="wide"
 )
 
 # ===== Paths, files, constants =====
