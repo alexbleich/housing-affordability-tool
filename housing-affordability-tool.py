@@ -10,7 +10,7 @@ from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 # ===== Tab title =====
 st.set_page_config(
-    page_title="VT Housing Aff. Tool",
+    page_title="VT Housing Aff. Visualizer",
     page_icon="🏘️",
     layout="wide"
 )
