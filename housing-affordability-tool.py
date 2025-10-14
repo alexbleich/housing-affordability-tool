@@ -378,7 +378,7 @@ def _ami_line_for_region(pct: int | None, region_label: str, capped_low: bool, c
 
 # ===== Chart Utils =====
 def _bar_with_values(ax, labels, values, pad_ratio):
-    bars = ax.bar(labels, values, color="#A7D3FF", edgecolor="black")
+    bars = ax.bar(labels, values, color="#A7D3FF", edgecolor="black", label="Total Development Cost (TDC)")
     for b in bars:
         y = b.get_height()
         ax.text(b.get_x()+b.get_width()/2, y * (1 + pad_ratio), fmt_money(y), ha="center", va="bottom", fontsize=10)
