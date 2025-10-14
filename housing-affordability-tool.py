@@ -391,8 +391,10 @@ def draw_chart(labels, tdc_vals, afford_price, price_to_income, income_to_price)
     ymax = 1.2 * max(top_bar, top_line, 1.0)
     _bar_with_values(ax, labels, tdc_vals, pad_ratio=0.025)
     if afford_price is not None and np.isfinite(afford_price):
-        ax.axhline(y=float(afford_price), linestyle="-", linewidth=2.8, color="#2E7D32",
-                   label="Income level you entered")
+        ax.axhline(y=float(afford_price), linestyle="-", linewidth=2.8, color="#2E7D32", label="Income level you entered")
+        ax.legend([ax.patches[0], ax.lines[-1]], ["Total Development Cost (TDC)", "Income level you entered"], loc="upper right", frameon=True)
+    else:
+        ax.legend([ax.patches[0]], ["Total Development Cost (TDC)"], loc="upper right", frameon=True)
     ax.set_ylim(0, ymax)
     ax.set_ylabel("Total Development Cost (TDC)")
     ax.set_xlabel("")
@@ -405,8 +407,6 @@ def draw_chart(labels, tdc_vals, afford_price, price_to_income, income_to_price)
         sec.yaxis.set_major_locator(MaxNLocator(prune='upper'))
     else:
         sec = ax.twinx(); sec.set_yticks([]); sec.set_ylabel("Income Req. to Purchase")
-        handles, labels = ax.get_legend_handles_labels()
-        ax.legend([ax.patches[0], ax.lines[-1]], ["Total Development Cost (TDC)", "Income level you entered"], loc="upper right", frameon=True)
     plt.xticks(rotation=0)
     fig.tight_layout()
     st.pyplot(fig)
