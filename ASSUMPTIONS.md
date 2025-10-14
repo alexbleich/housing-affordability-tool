@@ -1,6 +1,6 @@
 # Assumptions, Methods, & Data Schema
 
-This is a technical appendix for the Housing Affordability Visualizer *written for non-coders who want transparency*. This document explains how inputs are read, how costs are combined, how price maps to income, and what safeguards and caveats apply.
+This is a technical appendix for the Vermont Housing Affordability Visualizer *written for non-coders who want transparency*. This document explains how inputs are read, how costs are combined, how price maps to income, and what safeguards and caveats apply.
 
 ## 1) Data Files (and the columns expected)
 
