@@ -625,6 +625,7 @@ if show_results:
                         f"- This home is affordable for about **[{pct_display}%](https://www.incomebyzipcode.com/vermont#levels)** "
                         f"of Vermont’s 270,000 households (~{x_hhs:,})."
                     )
+                    st.markdown("\n".join(lines))
                 
                 st.write("")
 
