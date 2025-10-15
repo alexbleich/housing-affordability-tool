@@ -1,4 +1,4 @@
-# ===== Imports & Paths =====
+i# ===== Imports & Paths =====
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -47,8 +47,6 @@ REGIONS = {
     "Addison":    VHFA / "addison_ami.csv",
     "Vermont":    VHFA / "vermont_ami.csv",
 }
-REGION_PRETTY = {"Chittenden": "Chittenden", "Addison": "Addison", "Vermont": "Rest of Vermont"}
-PRETTY2REG = {v: k for k, v in REGION_PRETTY.items()}
 
 AMI_COL = "ami"
 DEFAULT_PARENT = "default"
@@ -347,35 +345,6 @@ def affordable_mask(user_income, required_incomes, eps=AFFORD_EPS):
     ui = float(user_income)
     return np.isfinite(r) & ((ui + eps) >= r)
 
-def ami_percent_for_income(region_key: str, hh_size: int, required_income: float):
-    df = R[region_key].copy()
-    col = f"income{hh_size}"
-    if col not in df.columns: return None, False
-    ser_inc = pd.to_numeric(df[col], errors="coerce")
-    ser_ami = pd.to_numeric(df[AMI_COL], errors="coerce")
-    mask = ser_inc.notna() & ser_ami.notna()
-    sub = pd.DataFrame({"ami": ser_ami[mask], "inc": ser_inc[mask]}).sort_values("ami")
-    if sub.empty: return None, False
-    ami_min, ami_max = 0.30, 1.50
-    inc_min = float(sub.loc[np.isclose(sub["ami"], ami_min), "inc"].min()) if (sub["ami"]<=ami_min).any() else float(sub["inc"].min())
-    inc_max = float(sub.loc[np.isclose(sub["ami"], ami_max), "inc"].max()) if (sub["ami"]>=ami_max).any() else float(sub["inc"].max())
-    inc = float(required_income)
-    if inc <= inc_min: return 30, True
-    if inc >= inc_max: return 150, True
-    sub_le = sub[sub["inc"] <= inc]
-    if sub_le.empty: return 30, True
-    ami_frac = float(sub_le.iloc[-1]["ami"])
-    return int(round(ami_frac*100)), False
-
-def _ami_line_for_region(pct: int | None, region_label: str, capped_low: bool, capped_high: bool) -> str:
-    is_county = region_label in ("Chittenden", "Addison")
-    if pct is None:
-        return f"—% of Area Median Income in {region_label}{' County' if is_county else ''}."
-    if capped_high:
-        return "Over 150% of Area Median Income in the rest of Vermont." if region_label == "Rest of Vermont" else f"Over 150% of Area Median Income in {region_label}{' County' if is_county else ''}."
-    suffix = " (at least)" if capped_low else ""
-    return f"{pct}% of Area Median Income in the rest of Vermont{suffix}." if region_label == "Rest of Vermont" else f"{pct}% of Area Median Income in {region_label}{' County' if is_county else ''}{suffix}."
-
 # ===== Chart Utils =====
 def _bar_with_values(ax, labels, values, pad_ratio):
     bars = ax.bar(labels, values, color="#A7D3FF", edgecolor="black", label="Total Development Cost (TDC)")
@@ -625,19 +594,19 @@ if show_results:
 
             if len(labels) == 1:
                 if len(affordable_labels) == 1:
-                    st.success("**Well done!** The total development cost of this home is less than the income required to buy it.")
+                    st.success("**Well done!** This home is affordable for the household income you chose.")
                 else:
-                    st.error("**Not quite!** This home is unaffordable for the household income you entered.")
+                    st.error("**Not quite!** This home is unaffordable for the household income you chose.")
             else:
                 k = len(affordable_labels)
                 if k == 0:
-                    st.error("**Not quite!** These homes are unaffordable for the household income you entered.")
+                    st.error("**Not quite!** These homes are unaffordable for the household income you chose.")
                 elif k == len(labels):
-                    st.success("**Well done!** The total development cost for all options are less than the income required to buy them.")
+                    st.success("**Well done!** All of the homes are affordable for the household income you chose.")
                 elif k == 1:
-                    st.success(f"**Well done!** The total development cost for **{affordable_labels[0]}** is less than the income required to buy it.")
+                    st.success(f"**Well done!** **{affordable_labels[0]}** is affordable for the household income you chose.")
                 else:
-                    st.success(f"**Well done!** The total development cost for **{affordable_labels[0]}** & **{affordable_labels[1]}** are less than the income required to buy them.")
+                    st.success(f"**Well done!** **{affordable_labels[0]}** & **{affordable_labels[1]}** are affordable for the household income you chose.")
 
             st.write("")
 
@@ -656,17 +625,7 @@ if show_results:
                         f"- This home is affordable for about **[{pct_display}%](https://www.incomebyzipcode.com/vermont#levels)** "
                         f"of Vermont’s 270,000 households (~{x_hhs:,})."
                     )
-                    lines.append("- To afford this home, you would need to make:")
                 
-                    sub_lines = []
-                    for rp in ["Chittenden", "Addison", "Rest of Vermont"]:
-                        reg_key_line = PRETTY2REG[rp]
-                        pct, capped = ami_percent_for_income(reg_key_line, int(household_size), req_inc)
-                        capped_low  = (pct == 30  and capped)
-                        capped_high = (pct == 150 and capped)
-                        sub_lines.append(f"  - {_ami_line_for_region(pct, rp, capped_low, capped_high)}")
-                
-                    st.markdown("\n".join(lines + sub_lines))
                 st.write("")
 
             st.subheader("Want to try again?")
