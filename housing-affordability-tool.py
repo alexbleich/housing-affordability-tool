@@ -461,7 +461,6 @@ def render_unit_card(i: int, disabled: bool = False, product: str = "townhome"):
                 " ", value=st.session_state[f"label_{i}"], key=f"label_{i}",
                 label_visibility="collapsed", disabled=disabled
             )
-            st.caption("Extras configured in data when available (e.g., Solar, Covered Parking).")
 
     label = st.session_state.units[i].get("custom_label", f"{pretty_short(product)} {i+1}")
     return {"label": label, "code": st.session_state[f"code_{i}"], "src": st.session_state[f"src_{i}"],
