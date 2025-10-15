@@ -602,11 +602,14 @@ if show_results:
                 if k == 0:
                     st.error("**Not quite!** These homes are unaffordable for the household income you chose.")
                 elif k == len(labels):
-                    st.success("**Well done!** All of the homes are affordable for the household income you chose.")
+                        if len(labels) == 2:
+                            st.success("**Well done!** All of these homes are affordable for the household income you chose.")
+                         else:
+                            st.success("**Well done!** Both of these homes are affordable for the household income you chose.")
                 elif k == 1:
                     st.success(f"**Well done!** **{affordable_labels[0]}** is affordable for the household income you chose.")
                 else:
-                    st.success(f"**Well done!** **{affordable_labels[0]}** & **{affordable_labels[1]}** are affordable for the household income you chose.")
+                    st.success(f"**Well done!** **{affordable_labels[0]}** & **{affordable_labels[1]}** are both affordable for the household income you chose.")
 
             st.write("")
 
